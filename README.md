@@ -25,6 +25,11 @@ Maranthudaadha-Assistant/
 ├── decider_kit/               # Reusable Decider client adapted from the supplied kit
 ├── third_party/
 │   └── strands-decider-kit/   # Original Apache-2.0 license and attribution
+├── .kiro/
+│   └── specs/maranthudaadha-assistant/
+│       ├── requirements.md    # Product requirements and acceptance criteria
+│       ├── design.md          # System design and safety boundaries
+│       └── tasks.md           # Implementation phases and remaining setup
 ├── scripts/
 │   └── auth_google.py        # One-time Google OAuth consent flow
 ├── data/                     # Created at runtime; ignored by Git
@@ -45,6 +50,10 @@ Maranthudaadha-Assistant/
 ## Strands Decider kit integration
 
 This assistant vendors the reusable `Decider` client and configuration module from the supplied AWS User Group Madurai Strands Decider hackathon kit. The Calendar safety intervention calls that client with two typed yes/no questions (event grounding and whether creating the event is appropriate). Its existing confidence thresholds, explicit Telegram confirmation path, request-size limit, rate limit, and fail-closed behavior remain in place. The standalone AgentShield demo, Bedrock modules, model files, local environments, and kit secrets are not part of this assistant. See `third_party/strands-decider-kit/` for the license and attribution.
+
+## Kiro project spec
+
+The product requirements, design, and implementation checklist are in [`.kiro/specs/maranthudaadha-assistant/`](.kiro/specs/maranthudaadha-assistant/).
 
 ## Setup on Windows
 
