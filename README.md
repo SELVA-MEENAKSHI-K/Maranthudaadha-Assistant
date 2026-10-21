@@ -2,7 +2,7 @@
 
 A private Telegram assistant that reads Google Calendar, sends event reminders, scans selected Gmail messages every 30 minutes, accepts typed/forwarded tasks and voice notes, and sends a calendar/email brief at **7:00 AM Asia/Kolkata**. Text understanding and email triage run through **Strands Agents** on the provided Strands-compatible hosted model. Every Calendar write passes a Strands `before_tool_call` intervention backed by **Strands Decider 2B**. This project does not use Amazon Bedrock or AWS credentials.
 
-Phase 2 adds Strands-based Gmail triage, received date and Gmail Read/Unread status, reply drafting with an explicit Send confirmation, and automatic Calendar reminders for important emails only when the date is explicitly quoted and Strands Decider confidently approves. Uncertain, rejected, or failed automatic decisions keep the Yes/No Calendar prompt. Phase 3 adds inbox capture and Telegram voice notes: details are extracted into a structured task, missing date/time is clarified, and a complete event requires Yes unless the user explicitly says “direct ah add pannu”. The exact Calendar tool call still passes through Decider before it runs. High-priority events receive additional reminders. Phase 4 adds Notion note save/search, reminder snooze and Done buttons, a task list, and a Sunday 8 PM weekly review.
+Phase 2 adds Strands-based Gmail triage, received date and Gmail Read/Unread status, reply drafting with an explicit Send confirmation and a Decider-backed policy review before send, and automatic Calendar reminders for important emails only when the date is explicitly quoted and Strands Decider confidently approves. Uncertain, rejected, or failed automatic decisions keep the Yes/No Calendar prompt. Phase 3 adds inbox capture and Telegram voice notes: details are extracted into a structured task, missing date/time is clarified, and a complete event requires Yes unless the user explicitly says “direct ah add pannu”. The exact Calendar tool call still passes through Decider before it runs. High-priority events receive additional reminders. Phase 4 adds Notion note save/search, reminder snooze and Done buttons, a task list, and a Sunday 8 PM weekly review.
 
 ## Project structure
 
@@ -14,6 +14,8 @@ Maranthudaadha-Assistant/
 │   ├── email_intelligence.py # Strands structured email triage; no tools
 │   ├── strands_runtime.py    # Strands model setup (hosted OpenAI-compatible endpoint)
 │   ├── strands_calendar.py   # Decider-gated Calendar tool call
+│   ├── reply_policy.py       # Decider policy review before Gmail sends
+│   ├── decider_limits.py     # Shared hosted Decider request-rate limit
 │   ├── gmail.py              # Filtered Gmail read and Telegram summaries
 │   ├── google_calendar.py    # Calendar read/create and encrypted OAuth tokens
 │   ├── handlers.py           # Telegram commands, inbox capture and confirmations
@@ -22,7 +24,7 @@ Maranthudaadha-Assistant/
 │   ├── store.py              # SQLite tokens, captures, email decisions, reminders and snoozes
 │   ├── web.py                # Authenticated Telegram webhook for Render
 │   └── __init__.py
-├── decider_kit/               # Reusable Decider client adapted from the supplied kit
+├── decider_kit/               # Reusable Decider client and selected patterns from the supplied kit
 ├── third_party/
 │   └── strands-decider-kit/   # Original Apache-2.0 license and attribution
 ├── .kiro/
@@ -49,7 +51,7 @@ Maranthudaadha-Assistant/
 
 ## Strands Decider kit integration
 
-This assistant vendors the reusable `Decider` client and configuration module from the supplied AWS User Group Madurai Strands Decider hackathon kit. The Calendar safety intervention calls that client with two typed yes/no questions (event grounding and whether creating the event is appropriate). Its existing confidence thresholds, explicit Telegram confirmation path, request-size limit, rate limit, and fail-closed behavior remain in place. The standalone AgentShield demo, Bedrock modules, model files, local environments, and kit secrets are not part of this assistant. See `third_party/strands-decider-kit/` for the license and attribution.
+This assistant vendors the reusable `Decider` client and selected patterns from the supplied AWS User Group Madurai Strands Decider hackathon kit. Calendar creation uses the guardrail pattern with exact-argument checks, confidence thresholds, explicit Telegram confirmation, shared request-rate limits, and fail-closed behavior. Gmail reply sending uses the policy pattern to review the draft before the final send; a flagged draft is not sent unless it needs human review and the owner explicitly chooses **Send anyway**. This review uses three Decider answers for each reply draft. It uses the configured free-plan key only; it does not enable billing or switch to a paid provider. If the check cannot run, the owner must explicitly choose **Send anyway** to continue. The standalone AgentShield demo, Bedrock/model-routing modules, AgentCore integrations, local environments, and kit secrets are not part of this assistant. Tool selection is already explicit in Telegram command routing and the Calendar agent has one tool, so a second model-based selector would add delay and consume quota without improving the choice. Notion and SQLite provide the app's note/task persistence; per-note hosted memory scoring would send more private data and use extra free quota. See `third_party/strands-decider-kit/` for the license and attribution.
 
 ## Kiro project spec
 

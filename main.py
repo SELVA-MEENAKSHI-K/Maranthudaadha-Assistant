@@ -64,7 +64,7 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("notion", notion_status))
     app.add_handler(CommandHandler("tasks", list_tasks))
     app.add_handler(CallbackQueryHandler(gmail_callback, pattern=r"^mail:(yes|no|reply):[A-Za-z0-9_-]{1,45}$"))
-    app.add_handler(CallbackQueryHandler(gmail_reply_callback, pattern=r"^mailreply:(send|cancel)$"))
+    app.add_handler(CallbackQueryHandler(gmail_reply_callback, pattern=r"^mailreply:(send|override|cancel)$"))
     app.add_handler(CallbackQueryHandler(capture_callback, pattern=r"^capture:(yes|no):[0-9a-f]{32}$"))
     app.add_handler(CallbackQueryHandler(reminder_action_callback, pattern=r"^rem:(s1|tom|done):[0-9a-f]{32}$"))
     app.add_handler(CallbackQueryHandler(task_done_callback, pattern=r"^task:done:[0-9a-f]{32}$"))

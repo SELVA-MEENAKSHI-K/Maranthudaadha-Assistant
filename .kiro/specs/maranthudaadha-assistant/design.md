@@ -43,6 +43,7 @@ The assistant is a Python 3.11 Telegram bot. Telegram is its only user interface
 3. Telegram displays sender, subject, received date, read/unread state, category, and summary.
 4. A clear deadline can be offered as a Calendar reminder; the Calendar write uses the same Decider guard.
 5. An email reply is drafted and previewed separately. Gmail send happens only after the owner selects the explicit send action.
+6. Before Gmail send, the kit's policy pattern checks only the outgoing draft text for credentials, threats/harassment, impersonation, or fraud. A clear violation blocks the send. A review result or unavailable Decider can be overridden only with a separate **Send anyway** action. The full source email and recipient address are not included in this policy request.
 
 ### Scheduled notifications
 
@@ -69,6 +70,14 @@ The assistant is a Python 3.11 Telegram bot. Telegram is its only user interface
 - Provider output is treated as untrusted data. It cannot change the event approval boundary or the configured account identity.
 - Never log or commit API keys, OAuth tokens, voice contents, or full email bodies unnecessarily.
 - A failure in an optional integration must not silently report a successful save, send, or Calendar write.
+
+## Kit pattern fit
+
+- **Guardrails:** applied to Calendar tool execution through Strands `before_tool_call`; exact event validation and evidence rules are app-specific additions.
+- **Policy:** applied before Gmail reply send. The request includes only the draft text and a short context label; the owner remains the final reviewer for an uncertain or unavailable policy result.
+- **Tool selection:** Telegram command dispatch already selects the operation deterministically, and the Calendar action agent has only one tool. A second hosted selector would add a request without narrowing a real choice.
+- **Context/memory:** SQLite task/reminder state and explicit Notion search already provide persistence/retrieval. Per-note Decider relevance scoring would spend one or more extra free answers per note and send more private content to the hosted service, so it is not enabled.
+- **Model routing:** the supplied routing path selects among Bedrock models. It is excluded because this project uses the hosted Strands-compatible endpoint and does not use Bedrock/AWS credentials.
 
 ## Deployment shape
 

@@ -53,6 +53,7 @@ Maranthudaadha Assistant is a private, Telegram-only personal assistant that hel
 - **4.3** When a message contains a clear deadline, the assistant shall offer a Yes/No action to add a Calendar reminder.
 - **4.4** Gmail reply shall be a separate action from Telegram's quote-reply feature. The assistant shall collect a draft, show its preview, and send only after an explicit Send confirmation.
 - **4.5** A Gmail scan or reply error shall produce a concise status message without claiming the operation succeeded.
+- **4.6** Before sending a Gmail draft, the assistant shall run a Strands Decider policy review against a limited safety policy. A blocked draft shall not be sent; an uncertain/review result or unavailable review may proceed only after the owner explicitly chooses **Send anyway**.
 
 ### 5. Inbox capture and voice
 

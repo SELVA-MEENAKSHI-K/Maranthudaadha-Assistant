@@ -1,5 +1,5 @@
 Strands Decider hackathon kit attribution
 
-This project vendors the reusable Decider client and configuration modules from the Strands Decider hackathon kit by AWS User Group Madurai and contributors. Those files are distributed under the Apache License 2.0; see LICENSE.
+This project vendors the reusable Decider client/configuration and the policy decision pattern adapted from the Strands Decider hackathon kit by AWS User Group Madurai and contributors. Those files are distributed under the Apache License 2.0; see LICENSE.
 
 This assistant uses the Strands Agents SDK and the hosted Strands Decider API. It does not include or use the kit's Amazon Bedrock integration.

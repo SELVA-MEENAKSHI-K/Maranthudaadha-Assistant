@@ -41,6 +41,8 @@ This checklist records the implemented product phases and the remaining account/
 - [x] 5.2 Connect the client to the Calendar-write Strands intervention.
 - [x] 5.3 Preserve exact-argument validation, confidence handling, request/rate limits, explicit confirmation, and fail-closed behavior.
 - [x] 5.4 Include the Apache-2.0 license and attribution; exclude the separate AgentShield demo, Bedrock integration, and private kit files.
+- [x] 5.5 Apply the kit's policy pattern to outgoing Gmail reply drafts before sending; block clear violations and require a separate owner override for review/unavailable results.
+- [x] 5.6 Record why model-based tool selection, AgentCore memory, and Bedrock model routing are not enabled in this app.
 
 ## Phase 6 — Release and live operation
 

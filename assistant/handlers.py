@@ -310,6 +310,56 @@ async def gmail_reply_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text((query.message.text or "") + "\n\nReply cancel panniten.", reply_markup=None)
         return
 
+    if action == "override" and draft.get("policy_status") not in {"review", "unavailable"}:
+        await query.message.reply_text("Indha draft-ku Send anyway option available illa. Reply-ai marubadi review pannunga.")
+        return
+
+    if action == "send" and not draft.get("policy_status"):
+        from assistant.reply_policy import review_gmail_reply
+
+        await query.edit_message_text((query.message.text or "") + "\n\nReply safety check pannuren…", reply_markup=None)
+        try:
+            verdict = await asyncio.to_thread(review_gmail_reply, settings, draft["body"])
+        except Exception:
+            log.exception("Gmail reply policy check failed")
+            draft["policy_status"] = "unavailable"
+            context.user_data["pending_gmail_reply"] = draft
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("Send anyway", callback_data="mailreply:override"),
+                InlineKeyboardButton("Cancel", callback_data="mailreply:cancel"),
+            ]])
+            await query.message.reply_text(
+                "Safety check ippo mudiyala; Gmail-ku reply innum pogala. Neenga draft-ai review pannitu "
+                "Send anyway press pannalaam, illa Cancel.", reply_markup=keyboard
+            )
+            return
+
+        if verdict.action == "block":
+            context.user_data["pending_gmail_reply"] = draft
+            await query.message.reply_text(
+                f"⚠️ Reply safety check block panniduchu ({verdict.category}); mail send aagala. "
+                "Reply button-ai marubadi press panni draft-ai maathi anuppunga, illa Cancel pannunga."
+            )
+            return
+        if verdict.action == "review":
+            draft["policy_status"] = "review"
+            context.user_data["pending_gmail_reply"] = draft
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("Send anyway", callback_data="mailreply:override"),
+                InlineKeyboardButton("Cancel", callback_data="mailreply:cancel"),
+            ]])
+            await query.message.reply_text(
+                f"⚠️ Reply safety review thevai ({verdict.category}, {verdict.severity}). "
+                "Draft-ai check pannitu, intentional-na Send anyway press pannunga.", reply_markup=keyboard
+            )
+            return
+        draft["policy_status"] = "allowed"
+        context.user_data["pending_gmail_reply"] = draft
+
+    if action == "override":
+        draft["policy_status"] = "overridden"
+        context.user_data["pending_gmail_reply"] = draft
+
     from assistant.gmail import GmailReader
 
     reader: GmailReader = context.application.bot_data["gmail_reader"]

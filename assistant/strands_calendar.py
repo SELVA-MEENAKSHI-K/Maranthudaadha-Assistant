@@ -7,9 +7,6 @@ with the approved values before calling Google Calendar.
 from __future__ import annotations
 
 import json
-import threading
-import time
-from collections import deque
 from typing import Any
 
 from decider_kit import Decider, DeciderError
@@ -17,6 +14,7 @@ from strands import tool
 from strands.interventions import Confirm, Deny, InterventionHandler, Proceed
 
 from assistant.config import Settings
+from assistant.decider_limits import reserve_decider_request
 from assistant.strands_runtime import make_strands_agent
 
 
@@ -34,10 +32,6 @@ QUESTIONS = {
             "false": "The event lacks user confirmation and qualifying cited email evidence, is already past, or should not be created.",
         }),
 }
-_DECIDER_LOCK = threading.Lock()
-_DECIDER_CALLS: deque[float] = deque()
-
-
 class CalendarGuardError(RuntimeError):
     """A Calendar write was blocked or could not be safely completed."""
 
@@ -58,17 +52,8 @@ class _DeciderClient:
         encoded = json.dumps({"state": state, "questions": QUESTIONS}, ensure_ascii=False).encode("utf-8")
         if len(encoded) > 7_500:
             raise CalendarGuardError("Strands Decider request exceeded its safe size limit")
-        with _DECIDER_LOCK:
-            now = time.monotonic()
-            while _DECIDER_CALLS and now - _DECIDER_CALLS[0] >= 60:
-                _DECIDER_CALLS.popleft()
-            if len(_DECIDER_CALLS) >= 10:
-                time.sleep(max(0.0, 60 - (now - _DECIDER_CALLS[0])))
-                now = time.monotonic()
-                while _DECIDER_CALLS and now - _DECIDER_CALLS[0] >= 60:
-                    _DECIDER_CALLS.popleft()
-            _DECIDER_CALLS.append(now)
         try:
+            reserve_decider_request()
             answers = self.client.ask(state, QUESTIONS)
             probabilities = {name: float(answers[name].p_yes) for name in QUESTIONS}
         except (DeciderError, KeyError, TypeError, ValueError) as exc:
