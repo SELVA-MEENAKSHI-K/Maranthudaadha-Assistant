@@ -22,6 +22,9 @@ Maranthudaadha-Assistant/
 │   ├── store.py              # SQLite tokens, captures, email decisions, reminders and snoozes
 │   ├── web.py                # Authenticated Telegram webhook for Render
 │   └── __init__.py
+├── decider_kit/               # Reusable Decider client adapted from the supplied kit
+├── third_party/
+│   └── strands-decider-kit/   # Original Apache-2.0 license and attribution
 ├── scripts/
 │   └── auth_google.py        # One-time Google OAuth consent flow
 ├── data/                     # Created at runtime; ignored by Git
@@ -38,6 +41,10 @@ Maranthudaadha-Assistant/
 - The Strands/Decider API key supplied through your hackathon kit. Check its free-plan limits; no AWS billing or Bedrock access is used.
 - (Optional) A Gemini API key for Telegram voice-note transcription only.
 - (Optional) A Notion internal integration and a database shared with it.
+
+## Strands Decider kit integration
+
+This assistant vendors the reusable `Decider` client and configuration module from the supplied AWS User Group Madurai Strands Decider hackathon kit. The Calendar safety intervention calls that client with two typed yes/no questions (event grounding and whether creating the event is appropriate). Its existing confidence thresholds, explicit Telegram confirmation path, request-size limit, rate limit, and fail-closed behavior remain in place. The standalone AgentShield demo, Bedrock modules, model files, local environments, and kit secrets are not part of this assistant. See `third_party/strands-decider-kit/` for the license and attribution.
 
 ## Setup on Windows
 

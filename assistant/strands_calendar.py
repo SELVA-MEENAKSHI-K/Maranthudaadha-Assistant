@@ -9,11 +9,10 @@ from __future__ import annotations
 import json
 import threading
 import time
-import urllib.error
-import urllib.request
 from collections import deque
 from typing import Any
 
+from decider_kit import Decider, DeciderError
 from strands import tool
 from strands.interventions import Confirm, Deny, InterventionHandler, Proceed
 
@@ -22,22 +21,18 @@ from assistant.strands_runtime import make_strands_agent
 
 
 QUESTIONS = {
-    "grounded": {
-        "type": "noul",
-        "instructions": "Is this exact Calendar event grounded in either the user's confirmation or an explicitly cited future date in a classified important email?",
-        "criteria": {
+    "grounded": Decider.noul(
+        "Is this exact Calendar event grounded in either the user's confirmation or an explicitly cited future date in a classified important email?",
+        {
             "true": "The proposed title, date, and priority match the exact event values derived from a user-confirmed request or cited email evidence.",
             "false": "The proposal changes, invents, or is unrelated to the user-confirmed request or cited email evidence.",
-        },
-    },
-    "appropriate": {
-        "type": "noul",
-        "instructions": "Is creating this Calendar event an appropriate action now?",
-        "criteria": {
+        }),
+    "appropriate": Decider.noul(
+        "Is creating this Calendar event an appropriate action now?",
+        {
             "true": "The user explicitly approved this event, OR an important email contains the exact cited future date for a reminder; the date is still in the future.",
             "false": "The event lacks user confirmation and qualifying cited email evidence, is already past, or should not be created.",
-        },
-    },
+        }),
 }
 _DECIDER_LOCK = threading.Lock()
 _DECIDER_CALLS: deque[float] = deque()
@@ -48,48 +43,35 @@ class CalendarGuardError(RuntimeError):
 
 
 class _DeciderClient:
-    """Small client for the hosted Strands Decider typed-answer endpoint."""
+    """Adapter from the hackathon kit's typed Decider client to this safety gate."""
 
     def __init__(self, settings: Settings):
-        self.url = settings.decider_url
-        self.api_key = settings.decider_api_key
+        self.client = Decider(
+            url=settings.decider_url,
+            api_key=settings.decider_api_key,
+            timeout=15,
+        )
 
     def ask(self, state: str) -> dict[str, float]:
-        if not self.api_key:
+        if not self.client.api_key:
             raise CalendarGuardError("Strands Decider is not configured")
-        encoded = json.dumps({"state": state, "questions": QUESTIONS}).encode("utf-8")
+        encoded = json.dumps({"state": state, "questions": QUESTIONS}, ensure_ascii=False).encode("utf-8")
         if len(encoded) > 7_500:
             raise CalendarGuardError("Strands Decider request exceeded its safe size limit")
-        request = urllib.request.Request(
-            self.url + "/v1/decide",
-            data=encoded,
-            headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"},
-            method="POST",
-        )
-        try:
-            with _DECIDER_LOCK:
+        with _DECIDER_LOCK:
+            now = time.monotonic()
+            while _DECIDER_CALLS and now - _DECIDER_CALLS[0] >= 60:
+                _DECIDER_CALLS.popleft()
+            if len(_DECIDER_CALLS) >= 10:
+                time.sleep(max(0.0, 60 - (now - _DECIDER_CALLS[0])))
                 now = time.monotonic()
                 while _DECIDER_CALLS and now - _DECIDER_CALLS[0] >= 60:
                     _DECIDER_CALLS.popleft()
-                if len(_DECIDER_CALLS) >= 10:
-                    time.sleep(max(0.0, 60 - (now - _DECIDER_CALLS[0])))
-                    now = time.monotonic()
-                    while _DECIDER_CALLS and now - _DECIDER_CALLS[0] >= 60:
-                        _DECIDER_CALLS.popleft()
-                _DECIDER_CALLS.append(now)
-                with urllib.request.urlopen(request, timeout=15) as response:
-                    payload = json.loads(response.read(64_000))
-        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
-            raise CalendarGuardError("Strands Decider could not return a valid decision") from exc
-
+            _DECIDER_CALLS.append(now)
         try:
-            answers = payload["answers"]
-            probabilities = {
-                name: float(answers[name]["noul"])
-                for name in QUESTIONS
-                if answers[name]["type"] == "noul"
-            }
-        except (KeyError, TypeError, ValueError) as exc:
+            answers = self.client.ask(state, QUESTIONS)
+            probabilities = {name: float(answers[name].p_yes) for name in QUESTIONS}
+        except (DeciderError, KeyError, TypeError, ValueError) as exc:
             raise CalendarGuardError("Strands Decider returned an invalid decision") from exc
         if set(probabilities) != set(QUESTIONS) or any(not 0.0 <= p <= 1.0 for p in probabilities.values()):
             raise CalendarGuardError("Strands Decider returned an incomplete decision")
