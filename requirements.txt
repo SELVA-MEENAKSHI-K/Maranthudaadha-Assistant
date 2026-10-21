@@ -1,0 +1,13 @@
+python-telegram-bot[job-queue]>=20.8,<22
+APScheduler>=3.10,<4
+fastapi>=0.115,<1
+uvicorn[standard]>=0.34,<1
+google-genai>=1.0,<2
+pydantic>=2.10,<3
+google-api-python-client>=2.150,<3
+google-auth-oauthlib>=1.2,<2
+google-auth-httplib2>=0.2,<1
+python-dotenv>=1.0,<2
+cryptography>=44,<47
+requests>=2.32,<3
+strands-agents[openai]>=1.60,<2
