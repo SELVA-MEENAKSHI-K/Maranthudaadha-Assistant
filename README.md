@@ -40,6 +40,30 @@ Maranthudaadha-Assistant/
 └── requirements.txt
 ```
 
+## Screenshots
+
+These screenshots show the local Google OAuth callback, the running scheduler, and Telegram Calendar/Gmail interactions. OAuth state/code values and Telegram API request URLs have been redacted or cropped before publishing. Repeated copies of the same Calendar screenshot are included once.
+
+### Google OAuth callback
+
+![Google OAuth authorization completed; callback values redacted](docs/screenshots/google-oauth-success.png)
+
+### OAuth access-denied callback example
+
+![Google OAuth access-denied callback; state value redacted](docs/screenshots/google-oauth-denied.png)
+
+### Scheduler running
+
+![APScheduler running the assistant reminder job; Telegram API URLs are cropped](docs/screenshots/scheduler-log.png)
+
+### Gmail summaries in Telegram
+
+![Telegram showing important Gmail summaries with date and Calendar action](docs/screenshots/gmail-notifications.png)
+
+### Calendar capture and reminders in Telegram
+
+![Telegram showing task capture, Calendar confirmation, and reminder flow](docs/screenshots/calendar-reminders.png)
+
 ## Requirements
 
 - Python 3.11
