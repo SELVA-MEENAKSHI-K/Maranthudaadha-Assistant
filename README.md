@@ -177,7 +177,8 @@ Send `/start` once to open the welcome message and command keyboard. You can the
 | `/scanmail` | Scans Gmail for important messages immediately. Automatic scans also run every 30 minutes while the bot is running. | Nothing. Review the email cards and their buttons. |
 | `/notion` | Checks whether Notion is configured in the running bot. | Nothing. Use `/note` or `/searchnotes` for notes. |
 | `/note <your note>` | Saves a note to the connected Notion data source. | Replace the example text with the note, e.g. `/note GDG meeting: discussed API authentication`. You can also type `note pannu <your note>`. |
-| `/searchnotes <keywords>` | Searches saved Notion notes. | Add words to search, e.g. `/searchnotes GDG API`. You can also ask a note question in natural language, such as `GDG meeting la enna sonnanga?`. |
+| `/searchnotes` | Lists every note in the connected Notion data source, including its content and Notion link. Long lists are sent as multiple Telegram messages. | Nothing. |
+| `/searchnotes <keywords>` | Searches saved Notion notes and returns all matches. | Add words to search, e.g. `/searchnotes GDG API`. You can also ask a note question in natural language, such as `GDG meeting la enna sonnanga?`. |
 | `/cancel` | Cancels a task capture that's waiting for a missing date or time. | Nothing. |
 
 #### Add a task or reminder

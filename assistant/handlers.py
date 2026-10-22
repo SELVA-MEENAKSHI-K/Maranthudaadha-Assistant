@@ -411,16 +411,31 @@ async def search_note_text(update: Update, context: ContextTypes.DEFAULT_TYPE, q
         await update.effective_message.reply_text("Notion connect panna .env-la NOTION_API_TOKEN, NOTION_DATA_SOURCE_ID set pannunga.")
         return
     try:
-        notes = await asyncio.to_thread(notion.search_notes, question)
+        list_all = not question.strip()
+        notes = await asyncio.to_thread(notion.list_notes if list_all else notion.search_notes,
+                                        *([] if list_all else [question]))
         if not notes:
-            await update.effective_message.reply_text("Andha topic-ku Notion note kidaikkala.")
+            await update.effective_message.reply_text(
+                "Notion database-la notes innum illa 🙂" if list_all else "Andha topic-ku Notion note kidaikkala."
+            )
             return
-        lines = ["Notion notes-la kandupidichadhu:"]
-        for note in notes[:5]:
-            lines.append(f"\n📝 {note['title']}\n{note['content'][:700]}")
-            if note["url"]:
-                lines.append(note["url"])
-        await update.effective_message.reply_text("\n".join(lines)[:3900], disable_web_page_preview=True)
+        heading = (f"📚 Notion database notes ({len(notes)}):" if list_all
+                   else f"🔎 Matching Notion notes ({len(notes)}):")
+        text = heading + "\n\n" + "\n\n".join(
+            f"📝 {note['title']}\n{note['content']}" + (f"\n{note['url']}" if note["url"] else "")
+            for note in notes
+        )
+        # Telegram limits each text message to 4096 characters. Split into
+        # readable chunks so all notes or all search matches can be returned.
+        while text:
+            if len(text) <= 3800:
+                chunk, text = text, ""
+            else:
+                split_at = text.rfind("\n", 0, 3800)
+                if split_at < 1000:
+                    split_at = 3800
+                chunk, text = text[:split_at], text[split_at:].lstrip("\n")
+            await update.effective_message.reply_text(chunk, disable_web_page_preview=True)
     except Exception as exc:
         await update.effective_message.reply_text(f"Notion search panna mudiyala: {str(exc)[:250]}")
 

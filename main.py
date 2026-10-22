@@ -27,7 +27,7 @@ async def setup_command_menu(application: Application) -> None:
         BotCommand("tasks", "Show pending captured tasks"),
         BotCommand("scanmail", "Check important Gmail messages"),
         BotCommand("status", "Check Google connection"),
-        BotCommand("searchnotes", "Search saved Notion notes"),
+        BotCommand("searchnotes", "List all notes or search by words"),
         BotCommand("notion", "Check or enable Notion notes"),
         BotCommand("cancel", "Cancel pending task capture"),
     ])

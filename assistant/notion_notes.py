@@ -44,6 +44,33 @@ class NotionNotes:
             },
         })
 
+    def _query_notes(self, filters: list[dict] | None = None) -> list[dict]:
+        payload = {
+            "page_size": 100,
+            "sorts": [{"property": "Name", "direction": "descending"}],
+        }
+        if filters:
+            payload["filter"] = filters[0] if len(filters) == 1 else {"or": filters}
+        notes = []
+        while True:
+            result = self._request(f"data_sources/{self.data_source_id}/query", payload)
+            for page in result.get("results", []):
+                properties = page.get("properties", {})
+                title_parts = properties.get("Name", {}).get("title", [])
+                content_parts = properties.get("Content", {}).get("rich_text", [])
+                title = "".join(p.get("plain_text", "") for p in title_parts)
+                content = "".join(p.get("plain_text", "") for p in content_parts)
+                if title or content:
+                    notes.append({"title": title or "Note", "content": content, "url": page.get("url", "")})
+            cursor = result.get("next_cursor")
+            if not result.get("has_more") or not cursor:
+                return notes
+            payload["start_cursor"] = cursor
+
+    def list_notes(self) -> list[dict]:
+        """Return every note in the shared data source, newest title first."""
+        return self._query_notes()
+
     def search_notes(self, question: str) -> list[dict]:
         terms = [t for t in re.findall(r"[\w-]{3,}", question.casefold())
                  if t not in {"enna", "sonnanga", "what", "did", "say", "note", "meeting", "about"}]
@@ -51,18 +78,4 @@ class NotionNotes:
         if not terms:
             raise ValueError("Search-ku konjam specific words anuppunga")
         filters = [{"property": "Content", "rich_text": {"contains": term}} for term in terms]
-        result = self._request(f"data_sources/{self.data_source_id}/query", {
-            "filter": filters[0] if len(filters) == 1 else {"or": filters},
-            "page_size": 20,
-            "sorts": [{"property": "Name", "direction": "descending"}],
-        })
-        notes = []
-        for page in result.get("results", []):
-            properties = page.get("properties", {})
-            title_parts = properties.get("Name", {}).get("title", [])
-            content_parts = properties.get("Content", {}).get("rich_text", [])
-            title = "".join(p.get("plain_text", "") for p in title_parts)
-            content = "".join(p.get("plain_text", "") for p in content_parts)
-            if title or content:
-                notes.append({"title": title or "Note", "content": content[:1000], "url": page.get("url", "")})
-        return notes
+        return self._query_notes(filters)
