@@ -144,59 +144,82 @@ Follow these steps in order. Open **PowerShell** in the `Maranthudaadha-Assistan
 
    If Google was already connected before adding Gmail reply support, run this again so Google's saved consent also includes `gmail.send`. Don't delete `data/assistant.sqlite3` unless you intentionally want to reconnect and lose the bot's saved state.
 
-### C. Start and use the bot
+### C. Start the bot
 
 10. Start the bot and keep this PowerShell window open:
 
-   ```powershell
-   .\.venv\Scripts\python.exe main.py
-   ```
+    ```powershell
+    .\.venv\Scripts\python.exe main.py
+    ```
 
-   To restart later, press **Ctrl+C** in the bot's PowerShell window and run the same start command again.
+    To restart later, press **Ctrl+C** in the bot's PowerShell window and run the same start command again.
 
-11. Open your bot in Telegram and send `/start`. The bot shows the command menu. To use it, tap the Telegram command menu or the quick buttons. Opening the chat by itself does not send `/start`; enter `/start` once to see the welcome message and keyboard.
+11. Open your bot in Telegram and send `/start`. The bot shows the command menu and quick buttons. Opening the chat by itself does not send `/start`, so send it once to see the welcome message and keyboard.
 
-12. Try these actions:
+## 🤖 How to use the Telegram bot
 
-   - Send a task such as `Tomorrow 5 PM project meeting`. Review the date/time and tap **Yes, add**. The Calendar event is created only after Strands Decider permits the tool call.
-   - Send `/today` to see today's Calendar events; `/tasks` to see captured tasks; `/status` to check Calendar access; `/scanmail` to scan matching email now.
-   - Important email cards show received time and Read/Unread state. Tap **Reply to Gmail**, type the reply, review its preview, then tap **Send reply**. A Telegram quote reply does not send an email.
-   - Important emails with clear, quoted dates may get a Calendar reminder automatically only after Decider confidently approves. Unclear dates or uncertain/rejected decisions show Yes/No for manual review.
-   - Gmail scans every 30 minutes while the bot is running. Scheduled reminders and daily/weekly briefs also require the process to stay running.
+Send `/start` once to open the welcome message and quick-command keyboard. Then tap a command from the menu, or just send a normal message.
 
-### How to use the Telegram bot
+> 💡 **`/tasks` only lists tasks. It does not create one.** To create a task, send its details as a normal message, for example `Tomorrow 5 PM project meeting`.
 
-Send `/start` once to open the welcome message and command keyboard. You can then type a command, tap it from Telegram's command menu, or send a normal message. **`/tasks` only lists tasks; it does not create one.** To create a task, send its details as a regular message.
+### 📅 Calendar and tasks
 
-| Command | What it does | What to send next |
-| --- | --- | --- |
-| `/start` | Shows the welcome message and quick command keyboard. | Nothing. Then choose a command or type a task/message. |
-| `/today` | Lists today's Google Calendar events. | Nothing. |
-| `/tasks` | Lists captured tasks and their status. | Nothing. Tap **Done** on a task to mark it complete. |
-| `/status` | Checks Google Calendar access and shows today's event count. | Nothing. |
-| `/scanmail` | Scans Gmail for important messages immediately. Automatic scans also run every 30 minutes while the bot is running. | Nothing. Review the email cards and their buttons. |
-| `/notion` | Checks whether Notion is configured in the running bot. | Nothing. Use `/note` or `/searchnotes` for notes. |
-| `/note <your note>` | Saves a note to the connected Notion data source. | Replace the example text with the note, e.g. `/note GDG meeting: discussed API authentication`. You can also type `note pannu <your note>`. |
-| `/searchnotes` | Lists every note in the connected Notion data source, including its content and Notion link. Long lists are sent as multiple Telegram messages. | Nothing. |
-| `/searchnotes <keywords>` | Searches saved Notion notes and returns all matches. | Add words to search, e.g. `/searchnotes GDG API`. You can also ask a note question in natural language, such as `GDG meeting la enna sonnanga?`. |
-| `/cancel` | Cancels a task capture that's waiting for a missing date or time. | Nothing. |
+| Command | What it does | Example |
+|:--|:--|:--|
+| `/start` | Opens the bot and shows the command menu | `/start` |
+| `/today` | Shows today's Google Calendar events | `/today` |
+| `/tasks` | Lists captured tasks. Tap **Done** to complete one | `/tasks` |
+| `/status` | Checks Google Calendar access and shows today's event count | `/status` |
+| `/cancel` | Cancels a task that is waiting for a missing date or time | `/cancel` |
 
-#### Add a task or reminder
+### 📧 Gmail
+
+| Command | What it does | Example |
+|:--|:--|:--|
+| `/scanmail` | Scans Gmail for important emails right now. Automatic scans also run every 30 minutes while the bot is running | `/scanmail` |
+
+On each email card you can:
+
+- Check the received time and **Read/Unread** status.
+- Tap **Yes / No** to add or skip a suggested Calendar reminder. Some clear, explicitly quoted dates may be added automatically after the safety check approves them.
+- Tap **Reply to Gmail**, type your reply, review the preview, then tap **Send reply**. A Telegram quote reply alone does not send an email.
+
+### 📝 Notion notes
+
+| Command | What it does | Example |
+|:--|:--|:--|
+| `/note <text>` | Saves a note to the connected Notion data source. You can also type `note pannu <text>` | `/note GDG meeting: discussed API authentication` |
+| `/searchnotes` | Lists every saved note with its content and Notion link. Long lists are sent as multiple messages | `/searchnotes` |
+| `/searchnotes <words>` | Searches saved notes and returns all matches | `/searchnotes GDG API` |
+| `/notion` | Checks whether Notion is configured in the running bot | `/notion` |
+
+### ✨ Things you can do without a command
+
+| You send | The bot does |
+|:--|:--|
+| `Tomorrow 5 PM project meeting` | Extracts the task, shows the title, date/time and priority, and asks you to tap **Yes, add** |
+| `direct ah add pannu: Friday 3 PM demo` | Requests a direct add. The Calendar safety check still applies, and forwarded text cannot use this bypass |
+| A voice note | Transcribes it and handles it like a typed task (needs the optional `GEMINI_API_KEY`; without it, send the same request as text) |
+| `note pannu <text>` | Saves a Notion note, same as `/note` |
+| `GDG meeting la enna sonnanga?` | Searches your Notion notes and answers from them |
+
+### ✅ Add a task or reminder
 
 1. Send a normal message with the task and its date/time, for example: `Tomorrow 10 AM project meeting`.
 2. If the date or time is missing, answer the bot's short follow-up question.
-3. Review the proposed title, date/time, and priority. Tap **Yes, add** to approve the Calendar event, or **No** to reject it. Saying `direct ah add pannu` requests a direct add, but the Calendar safety check still applies.
-4. The bot schedules reminders and shows **Snooze 1h**, **Tomorrow**, and **Done** buttons on reminders. `/tasks` lists captured tasks; tapping **Done** marks one complete.
+3. Review the proposed title, date/time and priority. Tap **Yes, add** to approve the Calendar event, or **No** to reject it.
+4. The bot schedules reminders and shows **Snooze 1h**, **Tomorrow** and **Done** buttons on each reminder.
 
-#### Review and reply to Gmail
+### 🔔 Automatic messages
 
-- A mail card shows its received time and Read/Unread status. If it includes a date, review the suggested Calendar action and tap **Yes** or **No**. Some clear, explicitly quoted dates may be added automatically after the safety check approves them.
-- To reply, tap **Reply to Gmail**, type your reply in the chat, review the draft, and tap **Send reply**. Typing a Telegram quote reply alone does not email anyone.
+| When | What you get |
+|:--|:--|
+| Before an event | Reminders at 1 day, 3 hours and 30 min. High-priority events get extra reminders |
+| 7:00 AM IST daily | Morning brief with today's events |
+| Every 30 minutes | Gmail scan for important emails |
+| Sunday 8:00 PM IST | Weekly review of completed tasks, pending tasks and next week's events |
 
-#### Voice notes and automatic messages
-
-- For voice notes, send a Telegram voice message. The optional `GEMINI_API_KEY` must be configured for transcription; without it, send the same request as text.
-- The bot automatically sends event reminders, a daily brief at 7:00 AM IST, and a weekly review on Sunday at 8:00 PM IST, as long as the bot process is running.
+> ⚠️ The bot must stay running (`main.py` open in PowerShell) for scheduled messages and reminders to work.
 
 ## Optional integrations
 
@@ -246,7 +269,6 @@ If you are publishing a **new copy/fork** of this project:
    ```
 
    GitHub may ask you to sign in. Never put a password or token in the remote URL. If a secret is accidentally published, revoke/rotate it immediately.
-
 
 ## Configuration
 
@@ -328,7 +350,7 @@ Even with webhooks, Render Free cannot promise reminder delivery: the sleeping p
 After installing the requirements, run the offline unit tests with:
 
 ```powershell
-   .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
 The tests use temporary SQLite databases and mock Notion HTTP responses; they do not contact Telegram, Google, Gemini, or Notion.
