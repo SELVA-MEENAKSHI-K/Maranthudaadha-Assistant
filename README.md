@@ -164,6 +164,39 @@ Follow these steps in order. Open **PowerShell** in the `Maranthudaadha-Assistan
    - Important emails with clear, quoted dates may get a Calendar reminder automatically only after Decider confidently approves. Unclear dates or uncertain/rejected decisions show Yes/No for manual review.
    - Gmail scans every 30 minutes while the bot is running. Scheduled reminders and daily/weekly briefs also require the process to stay running.
 
+### How to use the Telegram bot
+
+Send `/start` once to open the welcome message and command keyboard. You can then type a command, tap it from Telegram's command menu, or send a normal message. **`/tasks` only lists tasks; it does not create one.** To create a task, send its details as a regular message.
+
+| Command | What it does | What to send next |
+| --- | --- | --- |
+| `/start` | Shows the welcome message and quick command keyboard. | Nothing. Then choose a command or type a task/message. |
+| `/today` | Lists today's Google Calendar events. | Nothing. |
+| `/tasks` | Lists captured tasks and their status. | Nothing. Tap **Done** on a task to mark it complete. |
+| `/status` | Checks Google Calendar access and shows today's event count. | Nothing. |
+| `/scanmail` | Scans Gmail for important messages immediately. Automatic scans also run every 30 minutes while the bot is running. | Nothing. Review the email cards and their buttons. |
+| `/notion` | Checks whether Notion is configured in the running bot. | Nothing. Use `/note` or `/searchnotes` for notes. |
+| `/note <your note>` | Saves a note to the connected Notion data source. | Replace the example text with the note, e.g. `/note GDG meeting: discussed API authentication`. You can also type `note pannu <your note>`. |
+| `/searchnotes <keywords>` | Searches saved Notion notes. | Add words to search, e.g. `/searchnotes GDG API`. You can also ask a note question in natural language, such as `GDG meeting la enna sonnanga?`. |
+| `/cancel` | Cancels a task capture that's waiting for a missing date or time. | Nothing. |
+
+#### Add a task or reminder
+
+1. Send a normal message with the task and its date/time, for example: `Tomorrow 10 AM project meeting`.
+2. If the date or time is missing, answer the bot's short follow-up question.
+3. Review the proposed title, date/time, and priority. Tap **Yes, add** to approve the Calendar event, or **No** to reject it. Saying `direct ah add pannu` requests a direct add, but the Calendar safety check still applies.
+4. The bot schedules reminders and shows **Snooze 1h**, **Tomorrow**, and **Done** buttons on reminders. `/tasks` lists captured tasks; tapping **Done** marks one complete.
+
+#### Review and reply to Gmail
+
+- A mail card shows its received time and Read/Unread status. If it includes a date, review the suggested Calendar action and tap **Yes** or **No**. Some clear, explicitly quoted dates may be added automatically after the safety check approves them.
+- To reply, tap **Reply to Gmail**, type your reply in the chat, review the draft, and tap **Send reply**. Typing a Telegram quote reply alone does not email anyone.
+
+#### Voice notes and automatic messages
+
+- For voice notes, send a Telegram voice message. The optional `GEMINI_API_KEY` must be configured for transcription; without it, send the same request as text.
+- The bot automatically sends event reminders, a daily brief at 7:00 AM IST, and a weekly review on Sunday at 8:00 PM IST, as long as the bot process is running.
+
 ## Optional integrations
 
 ### Gemini voice transcription
