@@ -98,6 +98,20 @@ class GoogleCalendar:
         day_end = day_start + timedelta(days=1)
         return self.list_events(day_start, day_end)
 
+    def update_event_time(self, event_id: str, start: datetime, end: datetime) -> dict:
+        """Move an existing timed event while preserving its other Calendar fields."""
+        service = build("calendar", "v3", credentials=self.credentials(), cache_discovery=False)
+        return service.events().patch(
+            calendarId=self.settings.calendar_id,
+            eventId=event_id,
+            body={
+                "start": {"dateTime": start.astimezone(self.settings.timezone).isoformat(),
+                          "timeZone": self.settings.timezone_name},
+                "end": {"dateTime": end.astimezone(self.settings.timezone).isoformat(),
+                        "timeZone": self.settings.timezone_name},
+            },
+        ).execute(num_retries=1)
+
     def create_event(
         self,
         title: str,

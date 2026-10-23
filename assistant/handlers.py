@@ -69,7 +69,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
     keyboard = ReplyKeyboardMarkup(
-        [["/add", "/plan"], ["/findtime", "/week"], ["/today", "/tasks"], ["/scanmail", "/status"], ["/notion", "/searchnotes"], ["/language", "/cancel"]],
+        [["/add", "/plan"], ["/findtime", "/week"], ["/reschedule", "/today"], ["/tasks", "/scanmail"], ["/status", "/notion"], ["/searchnotes", "/language", "/cancel"]],
         resize_keyboard=True,
         is_persistent=True,
         input_field_placeholder="Task / reminder message type pannunga…",
@@ -77,10 +77,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lang = response_language(context)
     if lang == "en":
         welcome = ("Hello! I'm Maranthudaadha Assistant. I can help with Calendar reminders, daily plans, Gmail summaries, tasks, voice notes and Notion notes.\n\n"
-                   "/help — command list\n/add <event details> — add a Calendar event\n/plan — today's events, tasks and email deadlines\n/findtime [minutes] — find free time in the next 7 days\n/week — next 7 days of Calendar events\n/today — today's events\n/tasks — pending tasks\n/note <text> — save a Notion note\n/searchnotes <words> — search Notion\n/notion — Notion connection\n/status — Google connection\n/scanmail — check recent Gmail\n/language — choose Tamil, English or Auto\n/cancel — cancel a pending capture")
+                   "/help — command list\n/add <event details> — add a Calendar event\n/plan — today's events, tasks and email deadlines\n/findtime [minutes] — find free time in the next 7 days\n/week — next 7 days of Calendar events\n/reschedule — move an upcoming Calendar event\n/today — today's events\n/tasks — pending tasks\n/note <text> — save a Notion note\n/searchnotes <words> — search Notion\n/notion — Notion connection\n/status — Google connection\n/scanmail — check recent Gmail\n/language — choose Tamil, English or Auto\n/cancel — cancel a pending capture")
     else:
         welcome = ("வணக்கம்! நான் Maranthudaadha Assistant. Calendar reminders, காலை brief, Gmail summary, task capture, voice notes, Notion notes, weekly review செய்ய உதவுவேன்.\n\n"
-                   "/help — commands list\n/add <event details> — Calendar event add செய்ய\n/plan — இன்றைய events, pending tasks, email deadlines\n/findtime [minutes] — அடுத்த 7 நாட்களில் free time தேட\n/week — அடுத்த 7 நாட்களின் Calendar events\n/today — இன்றைய events\n/tasks — pending tasks\n/note <text> — Notion note save\n/searchnotes <words> — Notion search\n/notion — Notion connection check\n/status — Google connection status\n/scanmail — Gmail-ஐ இப்போ check பண்ண\n/language — தமிழ், English அல்லது Auto தேர்வு செய்ய\n/cancel — pending task capture-ஐ cancel பண்ண")
+                   "/help — commands list\n/add <event details> — Calendar event add செய்ய\n/plan — இன்றைய events, pending tasks, email deadlines\n/findtime [minutes] — அடுத்த 7 நாட்களில் free time தேட\n/week — அடுத்த 7 நாட்களின் Calendar events\n/reschedule — வரவிருக்கும் Calendar event நேரத்தை மாற்ற\n/today — இன்றைய events\n/tasks — pending tasks\n/note <text> — Notion note save\n/searchnotes <words> — Notion search\n/notion — Notion connection check\n/status — Google connection status\n/scanmail — Gmail-ஐ இப்போ check பண்ண\n/language — தமிழ், English அல்லது Auto தேர்வு செய்ய\n/cancel — pending task capture-ஐ cancel பண்ண")
     await update.effective_message.reply_text(
         welcome,
         reply_markup=keyboard,
@@ -152,6 +152,140 @@ async def add_event_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          else "Calendar-la add panna event details type pannunga. Example: `Tomorrow 5 PM project meeting`\n"
          "Date/time missing-na ketpen; add panna munnaadi confirmation kaatturen. `/cancel`-la stop pannalaam."),
         parse_mode="Markdown",
+    )
+
+
+async def reschedule_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """List upcoming timed events so the user can choose one to move."""
+    if not authorized(update, context):
+        return
+    lang = response_language(context)
+    calendar: GoogleCalendar = context.application.bot_data["calendar"]
+    now = datetime.now(calendar.settings.timezone)
+    try:
+        events = await asyncio.to_thread(calendar.list_events, now, now + timedelta(days=45))
+    except Exception as exc:
+        await update.effective_message.reply_text(_calendar_error(exc, lang))
+        return
+    events = [event for event in events if not event.get("all_day") and event["start"].astimezone(calendar.settings.timezone) > now]
+    events = events[:10]
+    if not events:
+        await update.effective_message.reply_text("No upcoming timed events found in the next 45 days." if lang == "en" else "அடுத்த 45 நாட்களில் மாற்றக்கூடிய timed events எதுவும் இல்லை.")
+        return
+    keyboard = [[InlineKeyboardButton(
+        f"{event['start'].astimezone(calendar.settings.timezone).strftime('%d %b %I:%M %p')} — {event['title'][:45]}",
+        callback_data=f"resched:select:{event['id']}",
+    )] for event in events]
+    await update.effective_message.reply_text(
+        "Choose an event to reschedule:" if lang == "en" else "மாற்ற வேண்டிய event-ஐ தேர்வு செய்யுங்கள்:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
+async def reschedule_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query or not query.data:
+        return
+    await _ack_callback(query)
+    if not authorized(update, context):
+        return
+    lang = response_language(context)
+    _, action, value = query.data.split(":", 2)
+    calendar: GoogleCalendar = context.application.bot_data["calendar"]
+    store = context.application.bot_data["store"]
+    if action == "select":
+        try:
+            now = datetime.now(calendar.settings.timezone)
+            events = await asyncio.to_thread(calendar.list_events, now, now + timedelta(days=calendar.settings.calendar_lookahead_days))
+            event = next((item for item in events if item["id"] == value and not item.get("all_day")), None)
+        except Exception as exc:
+            await query.message.reply_text(_calendar_error(exc, lang))
+            return
+        if not event:
+            await query.message.reply_text("That event is no longer available. Run /reschedule again." if lang == "en" else "அந்த event இப்போது கிடைக்கவில்லை. /reschedule-ஐ மீண்டும் பயன்படுத்துங்கள்.")
+            return
+        context.user_data["awaiting_reschedule"] = {"event_id": event["id"], "title": event["title"],
+                                                     "old_start": event["start"].isoformat(), "old_end": event["end"].isoformat()}
+        await query.edit_message_text(
+            (f"Selected: {event['title']}\nCurrent time: {event['start'].astimezone(calendar.settings.timezone).strftime('%d %b %Y, %I:%M %p')}\nSend the new date and time, for example: `Tomorrow 5:30 PM`." if lang == "en"
+             else f"தேர்வு செய்தது: {event['title']}\nஇப்போதைய நேரம்: {event['start'].astimezone(calendar.settings.timezone).strftime('%d %b %Y, %I:%M %p')}\nபுதிய தேதி, நேரத்தை அனுப்புங்கள். உதாரணம்: `Tomorrow 5:30 PM`."),
+            parse_mode="Markdown", reply_markup=None,
+        )
+        return
+    draft = context.user_data.get("pending_reschedule")
+    if not draft or draft.get("token") != value:
+        await query.message.reply_text("This reschedule request expired. Run /reschedule again." if lang == "en" else "இந்த reschedule request காலாவதியானது. /reschedule-ஐ மீண்டும் தொடங்குங்கள்.")
+        return
+    if action == "cancel":
+        context.user_data.pop("pending_reschedule", None)
+        await query.edit_message_text("Reschedule cancelled." if lang == "en" else "நேர மாற்றம் ரத்து செய்யப்பட்டது.", reply_markup=None)
+        return
+    old_start = datetime.fromisoformat(draft["old_start"]).astimezone(calendar.settings.timezone)
+    old_end = datetime.fromisoformat(draft["old_end"]).astimezone(calendar.settings.timezone)
+    new_start = datetime.fromisoformat(draft["new_start"]).astimezone(calendar.settings.timezone)
+    new_end = new_start + (old_end - old_start)
+    try:
+        conflicts = await _event_conflicts(calendar, new_start.isoformat(), duration=old_end - old_start, exclude_id=draft["event_id"])
+    except Exception:
+        log.exception("Calendar conflict check failed while rescheduling %s", draft["event_id"])
+        await query.message.reply_text("I couldn't check conflicts; the event was not moved. Please retry." if lang == "en" else "Conflict check செய்ய முடியவில்லை; event மாற்றப்படவில்லை. மீண்டும் முயற்சிக்கவும்.")
+        return
+    if conflicts and action != "force":
+        buttons = [[InlineKeyboardButton("Move anyway" if lang == "en" else "எப்படியும் மாற்று", callback_data=f"resched:force:{value}"),
+                    InlineKeyboardButton("Cancel" if lang == "en" else "ரத்து", callback_data=f"resched:cancel:{value}")]]
+        await query.edit_message_text(_conflict_message(conflicts, lang), reply_markup=InlineKeyboardMarkup(buttons))
+        return
+    try:
+        await asyncio.to_thread(calendar.update_event_time, draft["event_id"], new_start, new_end)
+    except Exception:
+        log.exception("Calendar event reschedule failed for %s", draft["event_id"])
+        await query.message.reply_text("The event couldn't be moved. Please try again." if lang == "en" else "Event-ஐ மாற்ற முடியவில்லை. மீண்டும் முயற்சிக்கவும்.")
+        return
+    try:
+        now = datetime.now(calendar.settings.timezone)
+        upcoming = await asyncio.to_thread(calendar.list_events, now, now + timedelta(days=calendar.settings.calendar_lookahead_days))
+        store.reconcile_reminders(upcoming, now)
+    except Exception:
+        # The Calendar change is already committed; the periodic sync will refresh reminder times.
+        log.exception("Could not immediately refresh reminders after rescheduling %s", draft["event_id"])
+    context.user_data.pop("pending_reschedule", None)
+    await query.edit_message_text(
+        (f"✅ Rescheduled: {draft['title']}\n{new_start.strftime('%d %b %Y, %I:%M %p')} IST" if lang == "en"
+         else f"✅ நேரம் மாற்றப்பட்டது: {draft['title']}\n{new_start.strftime('%d %b %Y, %I:%M %p')} IST"), reply_markup=None,
+    )
+
+
+async def _process_reschedule_time(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
+    lang = response_language(context, text)
+    request = context.user_data.get("awaiting_reschedule")
+    if not request:
+        return
+    settings = context.application.bot_data["settings"]
+    extractor: StrandsCapture = context.application.bot_data["capture_ai"]
+    try:
+        result = await asyncio.to_thread(extractor.analyze, text, datetime.now(settings.timezone), lang)
+    except Exception:
+        log.exception("Could not parse requested Calendar reschedule time")
+        await update.effective_message.reply_text("I couldn't understand that date/time. Please try again." if lang == "en" else "அந்த தேதி/நேரம் புரியவில்லை. மீண்டும் அனுப்புங்கள்.")
+        return
+    if not result.event_date or not result.event_time:
+        await update.effective_message.reply_text("Please include both a future date and time." if lang == "en" else "Future date மற்றும் time இரண்டையும் அனுப்புங்கள்.")
+        return
+    new_start = datetime.combine(date.fromisoformat(result.event_date), time.fromisoformat(result.event_time), settings.timezone)
+    if new_start <= datetime.now(settings.timezone):
+        await update.effective_message.reply_text("That time has passed. Choose a future time." if lang == "en" else "அந்த நேரம் கடந்துவிட்டது. Future time தேர்வு செய்யுங்கள்.")
+        return
+    context.user_data.pop("awaiting_reschedule", None)
+    token = uuid.uuid4().hex
+    old_start = datetime.fromisoformat(request["old_start"]).astimezone(settings.timezone)
+    old_end = datetime.fromisoformat(request["old_end"]).astimezone(settings.timezone)
+    context.user_data["pending_reschedule"] = {**request, "token": token, "new_start": new_start.isoformat()}
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("Confirm move" if lang == "en" else "மாற்றத்தை உறுதி செய்", callback_data=f"resched:confirm:{token}"),
+                                      InlineKeyboardButton("Cancel" if lang == "en" else "ரத்து", callback_data=f"resched:cancel:{token}")]])
+    await update.effective_message.reply_text(
+        (f"Move **{request['title']}**\n{old_start.strftime('%d %b %I:%M %p')} → {new_start.strftime('%d %b %I:%M %p')} IST?" if lang == "en"
+         else f"**{request['title']}** event-ai\n{old_start.strftime('%d %b %I:%M %p')} → {new_start.strftime('%d %b %I:%M %p')} IST நேரத்துக்கு மாற்றலாமா?"),
+        parse_mode="Markdown", reply_markup=keyboard,
     )
 
 
@@ -540,7 +674,8 @@ def _analysis_record(source: str, result, capture_id: str, direct: bool) -> dict
             "status": "awaiting_date" if not result.event_date else "awaiting_time" if not result.event_time else "confirm"}
 
 
-async def _event_conflicts(calendar: GoogleCalendar, start_value: str) -> list[dict]:
+async def _event_conflicts(calendar: GoogleCalendar, start_value: str, *, duration: timedelta | None = None,
+                          exclude_id: str | None = None) -> list[dict]:
     """Return existing events that overlap the proposed one-hour or all-day event."""
     timezone = calendar.settings.timezone
     if len(start_value.strip()) == 10:
@@ -549,11 +684,11 @@ async def _event_conflicts(calendar: GoogleCalendar, start_value: str) -> list[d
     else:
         start = datetime.fromisoformat(start_value.replace("Z", "+00:00"))
         start = start.replace(tzinfo=timezone) if start.tzinfo is None else start.astimezone(timezone)
-        end = start + timedelta(hours=1)
+        end = start + (duration or timedelta(hours=1))
     events = await asyncio.to_thread(calendar.list_events, start, end)
     return [
         event for event in events
-        if event["start"].astimezone(timezone) < end and event["end"].astimezone(timezone) > start
+        if event["id"] != exclude_id and event["start"].astimezone(timezone) < end and event["end"].astimezone(timezone) > start
     ]
 
 
@@ -648,6 +783,9 @@ async def capture_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
     if context.user_data.pop("awaiting_calendar_event", False):
         await _capture_text(update, context, text)
+        return
+    if context.user_data.get("awaiting_reschedule"):
+        await _process_reschedule_time(update, context, text)
         return
     lower = text.casefold().strip()
     if not message.forward_origin:
@@ -988,6 +1126,9 @@ async def cancel_capture(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not authorized(update, context):
         return
     lang = response_language(context)
+    if context.user_data.pop("awaiting_reschedule", None) or context.user_data.pop("pending_reschedule", None):
+        await update.effective_message.reply_text("Reschedule cancelled." if lang == "en" else "Event நேர மாற்றம் ரத்து செய்யப்பட்டது.")
+        return
     if context.user_data.pop("awaiting_calendar_event", False):
         await update.effective_message.reply_text("Calendar event flow cancelled." if lang == "en" else "சரி, Calendar event add flow cancel பண்ணிட்டேன்.")
         return
