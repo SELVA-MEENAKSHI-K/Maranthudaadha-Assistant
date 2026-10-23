@@ -368,6 +368,7 @@ After adding scopes, reauthorize with `python scripts/auth_google.py`. Google do
 ## Phase 3 privacy and voice notes
 
 Task text is sent to the configured hosted Strands model to extract title/date/time/priority; the extraction agent has no external tools and cannot write to Calendar. Voice transcription optionally uses Gemini 3.5 Transcribe and requires `GEMINI_API_KEY`; without it, typed messages still work. See [Gemini audio transcription documentation](https://ai.google.dev/gemini-api/docs/generate-content/transcribe) and [Gemini billing](https://ai.google.dev/gemini-api/docs/billing/).
+[![Architecture diagram of selva-meenakshi-k/maranthudaadha-assistant](https://gitdiagram.com/selva-meenakshi-k/maranthudaadha-assistant/diagram.png)](https://gitdiagram.com/selva-meenakshi-k/maranthudaadha-assistant?utm_source=readme&utm_medium=picture)
 
 ## Later phases
 
