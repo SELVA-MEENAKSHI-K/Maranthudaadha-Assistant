@@ -1,6 +1,6 @@
 # Maranthudaadha Assistant — Phases 1–4
 
-A private Telegram assistant that reads Google Calendar, sends event reminders, scans selected Gmail messages every 30 minutes, accepts typed/forwarded tasks and voice notes, and sends a calendar/email brief at **7:00 AM Asia/Kolkata**. Text understanding and email triage run through **Strands Agents** on the provided Strands-compatible hosted model. Every Calendar write passes a Strands `before_tool_call` intervention backed by **Strands Decider 2B**. This project does not use Amazon Bedrock or AWS credentials.
+A private Telegram assistant that reads Google Calendar, sends event reminders, scans selected Gmail messages every 30 minutes, accepts typed/forwarded tasks and voice notes, and sends a calendar/email brief at **7:00 AM Asia/Kolkata**. Text understanding and email triage run through **Strands Agents** on the provided Strands-compatible hosted model. Every Calendar write passes a Strands `before_tool_call` intervention backed by **Strands Decider 2B**.
 
 ## Recent feature highlights
 
@@ -78,13 +78,13 @@ These screenshots show the local Google OAuth callback, the running scheduler, a
 - Python 3.11
 - A Telegram bot token from Telegram's `@BotFather`
 - A Google Cloud OAuth desktop client with Google Calendar API and Gmail API enabled
-- The Strands/Decider API key supplied through your hackathon kit. Check its free-plan limits; no AWS billing or Bedrock access is used.
+- The Strands/Decider API key supplied through your hackathon kit. Check its free-plan limits.
 - (Optional) A Gemini API key for Telegram voice-note transcription only.
 - (Optional) A Notion internal integration and a database shared with it.
 
 ## Strands Decider kit integration
 
-This assistant vendors the reusable `Decider` client and selected patterns from the supplied AWS User Group Madurai Strands Decider hackathon kit. Calendar creation uses the guardrail pattern with exact-argument checks, confidence thresholds, explicit Telegram confirmation, shared request-rate limits, and fail-closed behavior. Gmail reply sending uses the policy pattern to review the draft before the final send; a flagged draft is not sent unless it needs human review and the owner explicitly chooses **Send anyway**. This review uses three Decider answers for each reply draft. It uses the configured free-plan key only; it does not enable billing or switch to a paid provider. If the check cannot run, the owner must explicitly choose **Send anyway** to continue. The standalone AgentShield demo, Bedrock/model-routing modules, AgentCore integrations, local environments, and kit secrets are not part of this assistant. Tool selection is already explicit in Telegram command routing and the Calendar agent has one tool, so a second model-based selector would add delay and consume quota without improving the choice. Notion and SQLite provide the app's note/task persistence; per-note hosted memory scoring would send more private data and use extra free quota. See `third_party/strands-decider-kit/` for the license and attribution.
+This assistant vendors the reusable `Decider` client and selected patterns from the supplied AWS User Group Madurai Strands Decider hackathon kit. Calendar creation uses the guardrail pattern with exact-argument checks, confidence thresholds, explicit Telegram confirmation, shared request-rate limits, and fail-closed behavior. Gmail reply sending uses the policy pattern to review the draft before the final send; a flagged draft is not sent unless it needs human review and the owner explicitly chooses **Send anyway**. This review uses three Decider answers for each reply draft. It uses the configured free-plan key only; it does not enable billing or switch to a paid provider. If the check cannot run, the owner must explicitly choose **Send anyway** to continue. The standalone AgentShield demo, AgentCore integrations, local environments, and kit secrets are not part of this assistant. Tool selection is already explicit in Telegram command routing and the Calendar agent has one tool, so a second model-based selector would add delay and consume quota without improving the choice. Notion and SQLite provide the app's note/task persistence; per-note hosted memory scoring would send more private data and use extra free quota. See `third_party/strands-decider-kit/` for the license and attribution.
 
 ## Kiro project spec
 
@@ -116,7 +116,7 @@ Follow these steps in order. Open **PowerShell** in the `Maranthudaadha-Assistan
    - Create an OAuth client of type **Desktop app** and download its JSON file. Copy the complete JSON onto one line in `GOOGLE_CLIENT_CONFIG_JSON` in `.env`.
    - Google treats `gmail.readonly` as a restricted scope. You may see an unverified-app warning during personal testing. See [Google's Gmail scope guidance](https://developers.google.com/workspace/gmail/api/auth/scopes).
 
-5. Set up the hosted Strands service from your hackathon kit. Put the supplied key in `DECIDER_API_KEY`. Unless you have a separate model key, leave `STRANDS_API_KEY` empty; the app will reuse `DECIDER_API_KEY`. Leave `DECIDER_URL`, `STRANDS_BASE_URL`, and `STRANDS_MODEL` at the provided defaults unless the kit instructions say otherwise. This project uses Strands Agents and Strands Decider; it does **not** use Bedrock or AWS credentials. Review the provider's free-plan limits before use.
+5. Set up the hosted Strands service from your hackathon kit. Put the supplied key in `DECIDER_API_KEY`. Unless you have a separate model key, leave `STRANDS_API_KEY` empty; the app will reuse `DECIDER_API_KEY`. Leave `DECIDER_URL`, `STRANDS_BASE_URL`, and `STRANDS_MODEL` at the provided defaults unless the kit instructions say otherwise. Review the provider's free-plan limits before use.
 
 ### B. Install and connect Google
 
