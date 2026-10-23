@@ -4,7 +4,7 @@ from __future__ import annotations
 import base64
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.header import decode_header, make_header
 from email.message import EmailMessage
 from email.utils import parseaddr
@@ -19,7 +19,13 @@ from assistant.google_calendar import GoogleCalendar
 from assistant.store import Store
 
 log = logging.getLogger(__name__)
-GMAIL_QUERY = 'in:inbox newer_than:2d {exam college GDG internship interview deadline "due date" assignment placement registration}'
+# Gmail search's relative units are day-based; scan the last day, then enforce
+# the exact five-hour window against each message's internalDate below.
+GMAIL_QUERY = "in:inbox newer_than:1d"
+EMAIL_TRIAGE_TERMS = (
+    "exam", "college", "gdg", "internship", "interview", "deadline", "due date",
+    "assignment", "placement", "registration",
+)
 
 
 def _quoted_absolute_date_matches(evidence: str, deadline_iso: str, timezone) -> bool:
@@ -111,6 +117,7 @@ class GmailReader:
             "received_at": received_at.isoformat(),
             "is_unread": "UNREAD" in message.get("labelIds", []),
             "body": body[:12000],
+            "snippet": message.get("snippet", "")[:500],
         }
 
     def send_reply(self, message_id: str, body: str) -> dict:
@@ -184,7 +191,10 @@ async def scan_gmail(context, manual: bool = False) -> int:
     scan_ok = False
     sent_count = 0
     failed_count = 0
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=5)
     try:
+        # Surface already-stored recent mail once in the new grouped layout.
+        store.prepare_recent_mail_grouping(cutoff.isoformat())
         known_ids = store.processed_email_ids()
         candidates = await asyncio.to_thread(reader.list_candidates, settings.gmail_scan_max_results, known_ids)
         scan_ok = True
@@ -194,15 +204,30 @@ async def scan_gmail(context, manual: bool = False) -> int:
                 continue
             try:
                 message = await asyncio.to_thread(reader.read_message, message_id)
-                analysis = await asyncio.to_thread(
-                    triage.analyze,
-                    subject=message["subject"],
-                    sender=message["sender"],
-                    received_at=datetime.fromisoformat(message["received_at"]),
-                    body=message["body"],
-                )
-                record = {key: value for key, value in message.items() if key != "body"}
-                record.update(analysis.model_dump())
+                received_at = datetime.fromisoformat(message["received_at"])
+                if received_at < cutoff:
+                    continue
+                record = {key: value for key, value in message.items() if key not in {"body", "snippet"}}
+                text_for_triage = f"{message['subject']}\n{message['sender']}\n{message['body']}".casefold()
+                if any(term in text_for_triage for term in EMAIL_TRIAGE_TERMS):
+                    # Keep the existing hosted-model triage limited to mail that
+                    # matches the assistant's academic/career relevance terms.
+                    analysis = await asyncio.to_thread(
+                        triage.analyze,
+                        subject=message["subject"],
+                        sender=message["sender"],
+                        received_at=received_at,
+                        body=message["body"],
+                    )
+                    record.update(analysis.model_dump())
+                else:
+                    record.update(
+                        important=False,
+                        category="other",
+                        summary=message["snippet"] or "(No preview available)",
+                        deadline_iso=None,
+                        date_evidence="",
+                    )
                 store.save_email_analysis(record)
                 processed += 1
                 # Auto-create only for a verified, future explicit date. Any Decider
@@ -246,31 +271,45 @@ async def scan_gmail(context, manual: bool = False) -> int:
                 log.exception("Could not process Gmail message %s", message_id)
                 failed_count += 1
 
-        for row in store.unnotified_emails():
-            local_received = datetime.fromisoformat(row["received_at"]).astimezone(settings.timezone)
-            seen_label = ("Unread" if row["is_unread"] else "Read") if row["is_unread"] is not None else "status unknown"
-            text = (f"📩 {row['subject']}\nFrom: {row['sender']}\n"
-                    f"Received: {local_received.strftime('%d %b %Y, %I:%M %p')} IST · {seen_label}\n"
-                    f"[{row['category']}] {row['summary']}")
-            buttons = []
-            if row["action_status"] == "pending" and row["deadline_iso"]:
-                text += f"\nDate/deadline: {row['deadline_iso']}\nCalendar-la add pannattuma?"
-                buttons.append([
-                    InlineKeyboardButton("Yes", callback_data=f"mail:yes:{row['message_id']}"),
-                    InlineKeyboardButton("No", callback_data=f"mail:no:{row['message_id']}"),
-                ])
-            elif row["action_status"] == "added":
-                text += "\n✅ Calendar-la automatic reminder set panniyachu."
-            buttons.append([InlineKeyboardButton("✉️ Reply to Gmail", callback_data=f"mail:reply:{row['message_id']}")])
-            keyboard = InlineKeyboardMarkup(buttons)
+        recent_rows = store.unnotified_emails(cutoff.isoformat())
+        groups = (
+            (True, "📬 Unseen / Unread mails"),
+            (False, "📭 Seen / Read mails"),
+            (None, "📨 Mails with unknown read status"),
+        )
+        for unread_value, heading in groups:
+            rows = [row for row in recent_rows if row["is_unread"] == unread_value]
+            if not rows:
+                continue
             await context.bot.send_message(
                 chat_id=settings.telegram_user_id,
-                text=text[:3900],
-                reply_markup=keyboard,
-                disable_web_page_preview=True,
+                text=f"{heading} — last 5 hours: {len(rows)}",
             )
-            store.mark_email_notified(row["message_id"])
-            sent_count += 1
+            for row in rows:
+                local_received = datetime.fromisoformat(row["received_at"]).astimezone(settings.timezone)
+                seen_label = "Unseen / Unread" if row["is_unread"] else "Seen / Read"
+                text = (f"📩 {row['subject']}\nFrom: {row['sender']}\n"
+                        f"Received: {local_received.strftime('%d %b %Y, %I:%M %p')} IST · {seen_label}\n"
+                        f"[{row['category']}] {row['summary']}")
+                buttons = []
+                if row["important"] and row["action_status"] == "pending" and row["deadline_iso"]:
+                    text += f"\nDate/deadline: {row['deadline_iso']}\nCalendar-la add pannattuma?"
+                    buttons.append([
+                        InlineKeyboardButton("Yes", callback_data=f"mail:yes:{row['message_id']}"),
+                        InlineKeyboardButton("No", callback_data=f"mail:no:{row['message_id']}"),
+                    ])
+                elif row["action_status"] == "added":
+                    text += "\n✅ Calendar-la automatic reminder set panniyachu."
+                buttons.append([InlineKeyboardButton("✉️ Reply to Gmail", callback_data=f"mail:reply:{row['message_id']}")])
+                keyboard = InlineKeyboardMarkup(buttons)
+                await context.bot.send_message(
+                    chat_id=settings.telegram_user_id,
+                    text=text[:3900],
+                    reply_markup=keyboard,
+                    disable_web_page_preview=True,
+                )
+                store.mark_email_notified(row["message_id"])
+                sent_count += 1
     except Exception:
         log.exception("Gmail scan failed")
         if manual:
@@ -287,6 +326,6 @@ async def scan_gmail(context, manual: bool = False) -> int:
     elif manual and scan_ok and processed == 0 and sent_count == 0:
         await context.bot.send_message(
             chat_id=settings.telegram_user_id,
-            text="Pudhu important mail edhuvum kandupidikkala 🙂",
+            text="Last 5 hours-la pudhu mail edhuvum kandupidikkala 🙂",
         )
     return processed

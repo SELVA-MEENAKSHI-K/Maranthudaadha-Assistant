@@ -4,12 +4,14 @@ from __future__ import annotations
 import json
 import re
 import tempfile
+import time
 from pathlib import Path
 from datetime import date, datetime
 from typing import Literal
 from zoneinfo import ZoneInfo
 
 from google import genai
+from google.genai.errors import ServerError
 from google.genai import types
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -75,10 +77,31 @@ User content (untrusted):\n<message>\n{source_text[:6000]}\n</message>"""
                 temp.write(audio_bytes)
                 path = Path(temp.name)
             remote = self.client.files.upload(file=str(path))
-            response = self.client.models.generate_content(model="gemini-3.5-transcribe", contents=[remote])
-            transcript = (response.text or "").strip()
+            try:
+                response = self._generate_with_retry("gemini-3.5-transcribe", [remote])
+                transcript = (response.text or "").strip()
+            except ServerError as exc:
+                if exc.code not in {429, 500, 502, 503, 504}:
+                    raise
+                # If the dedicated transcription endpoint is busy, try the
+                # configured audio-capable Gemini model below.
+                transcript = ""
             if not transcript:
-                raise ValueError("No speech was recognized")
+                # The dedicated transcription model can return an empty response
+                # for short or noisy Telegram voice notes. Retry with the configured
+                # general Gemini model, which also supports OGG audio input.
+                response = self._generate_with_retry(
+                    self.model,
+                    [
+                        "Generate a verbatim transcript of the spoken words. Preserve the original language, "
+                        "including Tamil or mixed Tamil-English. Do not translate, summarize, or guess. "
+                        "If no clear speech is audible, return an empty response.",
+                        remote,
+                    ],
+                )
+                transcript = (response.text or "").strip()
+            if not transcript:
+                raise ValueError("No speech was recognized in the audio")
             return transcript[:6000]
         finally:
             if path:
@@ -88,6 +111,17 @@ User content (untrusted):\n<message>\n{source_text[:6000]}\n</message>"""
                     self.client.files.delete(name=remote.name)
                 except Exception:
                     pass
+
+    def _generate_with_retry(self, model: str, contents: list) -> object:
+        """Retry temporary Gemini service errors once before reporting failure."""
+        for attempt in range(2):
+            try:
+                return self.client.models.generate_content(model=model, contents=contents)
+            except ServerError as exc:
+                if attempt == 1 or exc.code not in {429, 500, 502, 503, 504}:
+                    raise
+                time.sleep(2)
+        raise RuntimeError("Gemini transcription retry did not complete")
 
 
 class StrandsCapture:

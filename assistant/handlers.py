@@ -44,15 +44,42 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not authorized(update, context):
         return
     keyboard = ReplyKeyboardMarkup(
-        [["/today", "/tasks"], ["/scanmail", "/status"], ["/notion", "/searchnotes"], ["/cancel"]],
+        [["/add", "/today"], ["/tasks", "/scanmail"], ["/status", "/notion"], ["/searchnotes", "/cancel"]],
         resize_keyboard=True,
         is_persistent=True,
         input_field_placeholder="Task / reminder message type pannunga…",
     )
     await update.effective_message.reply_text(
         "வணக்கம்! நான் Maranthudaadha Assistant. Calendar reminders, காலை brief, Gmail summary, task capture, voice notes, Notion notes, weekly review செய்ய உதவுவேன்.\n\n"
-        "/today — இன்றைய events\n/tasks — pending tasks\n/note <text> — Notion note save\n/searchnotes <words> — Notion search\n/status — Google connection status\n/scanmail — Gmail-ஐ இப்போ check பண்ண\n/cancel — pending task capture-ஐ cancel பண்ண",
+        "/help — commands list\n/add <event details> — Calendar event add செய்ய\n/today — இன்றைய events\n/tasks — pending tasks\n/note <text> — Notion note save\n/searchnotes <words> — Notion search\n/notion — Notion connection check\n/status — Google connection status\n/scanmail — Gmail-ஐ இப்போ check பண்ண\n/cancel — pending task capture-ஐ cancel பண்ண",
         reply_markup=keyboard,
+    )
+
+
+async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Reply helpfully when the owner sends an unsupported bot command."""
+    if not authorized(update, context):
+        return
+    command = (update.effective_message.text or "").split(maxsplit=1)[0]
+    await update.effective_message.reply_text(
+        f"{command} command theriyala. Available commands paakka /help anuppunga."
+    )
+
+
+async def add_event_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Start a Calendar capture from the explicit /add command."""
+    if not authorized(update, context):
+        return
+    details = " ".join(context.args).strip()
+    if details:
+        context.user_data.pop("awaiting_calendar_event", None)
+        await _capture_text(update, context, details)
+        return
+    context.user_data["awaiting_calendar_event"] = True
+    await update.effective_message.reply_text(
+        "Calendar-la add panna event details type pannunga. Example: `Tomorrow 5 PM project meeting`\n"
+        "Date/time missing-na ketpen; add panna munnaadi confirmation kaatturen. `/cancel`-la stop pannalaam.",
+        parse_mode="Markdown",
     )
 
 
@@ -277,6 +304,9 @@ async def capture_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             f"✉️ Reply preview — {subject}\n\n{text.strip()}",
             reply_markup=keyboard,
         )
+        return
+    if context.user_data.pop("awaiting_calendar_event", False):
+        await _capture_text(update, context, text)
         return
     lower = text.casefold().strip()
     if not message.forward_origin:
@@ -584,6 +614,9 @@ async def capture_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def cancel_capture(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not authorized(update, context):
         return
+    if context.user_data.pop("awaiting_calendar_event", False):
+        await update.effective_message.reply_text("சரி, Calendar event add flow cancel பண்ணிட்டேன்.")
+        return
     row = context.application.bot_data["store"].latest_waiting_capture()
     if row:
         context.application.bot_data["store"].finish_capture(row["capture_id"], "cancelled")
@@ -611,8 +644,13 @@ async def voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         transcript = await asyncio.to_thread(extractor.transcribe, audio.getvalue())
         await status_msg.edit_text("Purinjukitten; task details check pannuren…")
         await _capture_text(update, context, transcript)
-    except Exception:
+    except Exception as exc:
+        log.exception("Voice note download or transcription failed")
         if not settings.gemini_api_key:
             await status_msg.edit_text("Voice transcription-ku Gemini API key thevai. Ippo text message anuppalaam; Strands text workflow work aagum.")
+        elif isinstance(exc, ValueError) and "No speech was recognized" in str(exc):
+            await status_msg.edit_text("Audio-la clear speech detect aagala. Konjam clear-ah pesi, voice note marubadi anuppunga; illaina text-ah anuppalaam.")
+        elif getattr(exc, "code", None) in {429, 500, 502, 503, 504}:
+            await status_msg.edit_text("Gemini service ippo busy-ah irukku. Konjam neram kazhichu voice note marubadi anuppunga.")
         else:
             await status_msg.edit_text("Voice note transcribe panna mudiyala. Text-ah anuppi try pannunga.")

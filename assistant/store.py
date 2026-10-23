@@ -37,6 +37,10 @@ class Store:
                     encrypted_value BLOB NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS app_metadata (
+                    name TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS reminders (
                     event_id TEXT NOT NULL,
                     event_title TEXT NOT NULL,
@@ -186,6 +190,19 @@ class Store:
         with self.connect() as db:
             return {row[0] for row in db.execute("SELECT message_id FROM gmail_messages")}
 
+    def prepare_recent_mail_grouping(self, since: str) -> None:
+        """Re-notify recent stored mail once after enabling Seen/Unseen grouping."""
+        with self.connect() as db:
+            inserted = db.execute(
+                "INSERT OR IGNORE INTO app_metadata(name, value) VALUES(?, ?)",
+                ("gmail_recent_grouping_v1", "done"),
+            )
+            if inserted.rowcount:
+                db.execute(
+                    "UPDATE gmail_messages SET notified=0 WHERE received_at>=?",
+                    (since,),
+                )
+
     def save_email_analysis(self, record: dict) -> None:
         """Persist minimal metadata/summary only; the raw email body is not stored."""
         status = "pending" if record["important"] and record.get("deadline_iso") else "none"
@@ -201,10 +218,15 @@ class Store:
                  datetime.now().astimezone().isoformat()),
             )
 
-    def unnotified_emails(self) -> list[sqlite3.Row]:
+    def unnotified_emails(self, since: str | None = None) -> list[sqlite3.Row]:
         with self.connect() as db:
+            if since is None:
+                return db.execute(
+                    "SELECT * FROM gmail_messages WHERE notified=0 ORDER BY received_at"
+                ).fetchall()
             return db.execute(
-                "SELECT * FROM gmail_messages WHERE important=1 AND notified=0 ORDER BY received_at"
+                "SELECT * FROM gmail_messages WHERE notified=0 AND received_at>=? ORDER BY received_at",
+                (since,),
             ).fetchall()
 
     def mark_email_notified(self, message_id: str) -> None:

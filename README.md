@@ -167,6 +167,8 @@ Send `/start` once to open the welcome message and quick-command keyboard. Then 
 | Command | What it does | Example |
 |:--|:--|:--|
 | `/start` | Opens the bot and shows the command menu | `/start` |
+| `/help` | Shows available commands and quick actions | `/help` |
+| `/add <event details>` | Starts a Calendar event capture, asking for confirmation before adding | `/add Tomorrow 5 PM project meeting` |
 | `/today` | Shows today's Google Calendar events | `/today` |
 | `/tasks` | Lists captured tasks. Tap **Done** to complete one | `/tasks` |
 | `/status` | Checks Google Calendar access and shows today's event count | `/status` |
@@ -176,7 +178,7 @@ Send `/start` once to open the welcome message and quick-command keyboard. Then 
 
 | Command | What it does | Example |
 |:--|:--|:--|
-| `/scanmail` | Scans Gmail for important emails right now. Automatic scans also run every 30 minutes while the bot is running | `/scanmail` |
+| `/scanmail` | Scans Inbox mail from the last five hours, grouped by Seen/Read and Unseen/Unread | `/scanmail` |
 
 On each email card you can:
 
@@ -203,9 +205,11 @@ On each email card you can:
 | `note pannu <text>` | Saves a Notion note, same as `/note` |
 | `GDG meeting la enna sonnanga?` | Searches your Notion notes and answers from them |
 
+An unknown command gets a short explanation and points to `/help`.
+
 ### ✅ Add a task or reminder
 
-1. Send a normal message with the task and its date/time, for example: `Tomorrow 10 AM project meeting`.
+1. Send `/add Tomorrow 10 AM project meeting`, or send a normal message with the task and its date/time. With just `/add`, the bot asks you to send the event details next.
 2. If the date or time is missing, answer the bot's short follow-up question.
 3. Review the proposed title, date/time and priority. Tap **Yes, add** to approve the Calendar event, or **No** to reject it.
 4. The bot schedules reminders and shows **Snooze 1h**, **Tomorrow** and **Done** buttons on each reminder.
@@ -216,7 +220,7 @@ On each email card you can:
 |:--|:--|
 | Before an event | Reminders at 1 day, 3 hours and 30 min. High-priority events get extra reminders |
 | 7:00 AM IST daily | Morning brief with today's events |
-| Every 30 minutes | Gmail scan for important emails |
+| Every 30 minutes | Gmail scan for Inbox messages received in the last five hours, grouped by Seen/Read and Unseen/Unread |
 | Sunday 8:00 PM IST | Weekly review of completed tasks, pending tasks and next week's events |
 
 > ⚠️ The bot must stay running (`main.py` open in PowerShell) for scheduled messages and reminders to work.
@@ -308,9 +312,9 @@ All secrets belong in `.env` locally or the hosting provider's secret environmen
 - Calendar API work runs off the Telegram event loop. A failed reminder send remains pending to retry on a later check.
 - At 07:00 IST, the bot lists today's Calendar events.
 - Google OAuth tokens are encrypted in SQLite using `TOKEN_ENCRYPTION_KEY`.
-- Gmail search is limited to Inbox mail from the last two days matching exam, college, GDG, internship, interview, deadline, due date, assignment, placement, or registration keywords. Attachments are not downloaded.
-- Matching email content is sent to the configured Strands model for classification, summary, and date extraction. The model has no external tools. Raw body text is used in memory and not saved; SQLite keeps IDs, subject/sender, short summary, extracted date/evidence, and your decision.
-- Important mail summaries include the received date in IST and the Read/Unread status Gmail reported at scan time. Press **Reply**, type the exact reply, review the preview, then press **Send reply**; no message is sent before that explicit action. Replies are capped at 3,000 characters and sent in the original Gmail thread.
+- Gmail reports Inbox mail received in the last five hours, grouped as Seen/Read and Unseen/Unread. Attachments are not downloaded. The scan checks the last day through Gmail and applies an exact five-hour timestamp cutoff locally.
+- Matching academic/career email content is sent to the configured Strands model for classification, summary, and date extraction. Other mail uses Gmail's short preview and is not sent to the model. Raw body text is used in memory and not saved; SQLite keeps IDs, subject/sender, short summary, extracted date/evidence, and your decision.
+- Mail cards include the received date in IST and the Read/Unread status Gmail reported at scan time. Press **Reply**, type the exact reply, review the preview, then press **Send reply**; no message is sent before that explicit action. Replies are capped at 3,000 characters and sent in the original Gmail thread.
 - An important email with a future, unambiguous full date matching its exact quoted date evidence may create a High-priority Calendar event automatically only if Strands Decider confidently approves it. Relative dates and ambiguous numeric dates stay on the Yes/No confirmation path. The system schedules the normal reminders for an approved event. If the date is unclear, Decider is uncertain/rejects, or a service fails, no automatic event is created. Date-only items become all-day events; explicit times become one-hour events. Past dates are rejected and stable event IDs prevent duplicates.
 - If Strands or Decider is unavailable, AI capture/triage or Calendar writes fail safely; a rejected or uncertain write never reaches Google Calendar. Calendar read/reminder features continue.
 - Text and forwarded-message capture extracts a task, future date/time, and High/Medium/Low priority. If date or time is missing, the bot asks for it and keeps one pending clarification; answer it or use `/cancel` before starting another capture.

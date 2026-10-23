@@ -9,12 +9,15 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock
 
+from google.genai.errors import ServerError
+
 try:
     import requests  # noqa: F401
 except ModuleNotFoundError:
     sys.modules["requests"] = types.SimpleNamespace(post=None)
 
 from assistant import notion_notes
+from assistant.capture import GeminiCapture
 from assistant.store import Store
 
 
@@ -26,6 +29,34 @@ class StorePhase4Tests(unittest.TestCase):
 
     def tearDown(self):
         self.tempdir.cleanup()
+
+    def test_recent_gmail_grouping_only_re_notifies_messages_after_cutoff(self):
+        now = datetime.now(timezone.utc)
+        for message_id, received_at in (
+            ("recent-mail", now - timedelta(hours=2)),
+            ("old-mail", now - timedelta(hours=6)),
+        ):
+            self.store.save_email_analysis({
+                "message_id": message_id,
+                "thread_id": f"thread-{message_id}",
+                "subject": message_id,
+                "sender": "sender@example.com",
+                "received_at": received_at.isoformat(),
+                "is_unread": True,
+                "important": False,
+                "category": "other",
+                "summary": "Preview",
+            })
+            self.store.mark_email_notified(message_id)
+
+        cutoff = (now - timedelta(hours=5)).isoformat()
+        self.store.prepare_recent_mail_grouping(cutoff)
+        recent_rows = self.store.unnotified_emails(cutoff)
+        self.assertEqual([row["message_id"] for row in recent_rows], ["recent-mail"])
+
+        # The one-time migration must not make the same mail notify again.
+        self.store.prepare_recent_mail_grouping(cutoff)
+        self.assertEqual(self.store.unnotified_emails(cutoff), recent_rows)
 
     def test_priority_reminder_schedule_and_done(self):
         now = datetime.now(timezone.utc)
@@ -83,6 +114,45 @@ class StorePhase4Tests(unittest.TestCase):
         finally:
             db.close()
         self.assertIn("priority", columns)
+
+
+class VoiceTranscriptionTests(unittest.TestCase):
+    def test_empty_transcriber_response_falls_back_to_configured_gemini_model(self):
+        capture = GeminiCapture.__new__(GeminiCapture)
+        uploaded = types.SimpleNamespace(name="files/voice", uri="https://example.test/voice")
+        capture.client = Mock()
+        capture.client.files.upload.return_value = uploaded
+        capture.client.models.generate_content.side_effect = [
+            types.SimpleNamespace(text=""),
+            types.SimpleNamespace(text="வணக்கம்"),
+        ]
+        capture.model = "gemini-3.8-flash"
+
+        transcript = capture.transcribe(b"test audio bytes")
+
+        self.assertEqual(transcript, "வணக்கம்")
+        self.assertEqual(capture.client.models.generate_content.call_count, 2)
+        self.assertEqual(capture.client.files.delete.call_args.kwargs["name"], uploaded.name)
+
+    def test_temporary_gemini_unavailable_error_retries_once(self):
+        from unittest.mock import patch
+
+        capture = GeminiCapture.__new__(GeminiCapture)
+        uploaded = types.SimpleNamespace(name="files/voice", uri="https://example.test/voice")
+        capture.client = Mock()
+        capture.client.files.upload.return_value = uploaded
+        capture.client.models.generate_content.side_effect = [
+            types.SimpleNamespace(text=""),
+            ServerError(503, {"error": {"message": "temporarily unavailable"}}),
+            types.SimpleNamespace(text="வணக்கம்"),
+        ]
+        capture.model = "gemini-3.8-flash"
+
+        with patch("assistant.capture.time.sleep"):
+            transcript = capture.transcribe(b"test audio bytes")
+
+        self.assertEqual(transcript, "வணக்கம்")
+        self.assertEqual(capture.client.models.generate_content.call_count, 3)
 
 
 class NotionPhase4Tests(unittest.TestCase):

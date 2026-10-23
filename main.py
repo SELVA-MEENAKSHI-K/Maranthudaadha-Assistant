@@ -10,9 +10,9 @@ from assistant.config import load_settings
 from assistant.email_intelligence import StrandsEmailTriage
 from assistant.gmail import GmailReader
 from assistant.google_calendar import GoogleCalendar
-from assistant.handlers import (cancel_capture, capture_callback, capture_message, gmail_callback, gmail_reply_callback,
+from assistant.handlers import (add_event_command, cancel_capture, capture_callback, capture_message, gmail_callback, gmail_reply_callback,
                                 list_tasks, note_command, notion_status, reminder_action_callback, scan_mail_now,
-                                search_notes_command, start, status, task_done_callback, today, voice_message)
+                                search_notes_command, start, status, task_done_callback, today, unknown_command, voice_message)
 from assistant.capture import StrandsCapture
 from assistant.jobs import register_jobs
 from assistant.store import Store
@@ -23,6 +23,8 @@ async def setup_command_menu(application: Application) -> None:
     """Keep bot commands available from Telegram's chat menu across sessions."""
     await application.bot.set_my_commands([
         BotCommand("start", "Open assistant and quick actions"),
+        BotCommand("help", "Show commands and how to use them"),
+        BotCommand("add", "Add an event to Google Calendar"),
         BotCommand("today", "Show today's Calendar events"),
         BotCommand("tasks", "Show pending captured tasks"),
         BotCommand("scanmail", "Check important Gmail messages"),
@@ -55,6 +57,8 @@ def build_application() -> Application:
         notion_notes=notion_notes,
     )
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", start))
+    app.add_handler(CommandHandler("add", add_event_command))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("today", today))
     app.add_handler(CommandHandler("scanmail", scan_mail_now))
@@ -63,6 +67,7 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("searchnotes", search_notes_command))
     app.add_handler(CommandHandler("notion", notion_status))
     app.add_handler(CommandHandler("tasks", list_tasks))
+    app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
     app.add_handler(CallbackQueryHandler(gmail_callback, pattern=r"^mail:(yes|no|reply):[A-Za-z0-9_-]{1,45}$"))
     app.add_handler(CallbackQueryHandler(gmail_reply_callback, pattern=r"^mailreply:(send|override|cancel)$"))
     app.add_handler(CallbackQueryHandler(capture_callback, pattern=r"^capture:(yes|no):[0-9a-f]{32}$"))
