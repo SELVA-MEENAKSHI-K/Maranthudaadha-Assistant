@@ -89,11 +89,19 @@ async def morning_brief(context: ContextTypes.DEFAULT_TYPE) -> None:
         recent_mail = store.recent_important_emails(now - timedelta(days=1))
         if events or recent_mail:
             lines = ["🌅 Good morning!" if lang == "en" else "🌅 காலை வணக்கம்!"]
-            if events:
+            completed_ids = store.completed_event_ids([event["id"] for event in events])
+            active_events = [event for event in events if event["id"] not in completed_ids]
+            completed_events = [event for event in events if event["id"] in completed_ids]
+            if active_events:
                 lines.append("Today's Calendar:" if lang == "en" else "இன்றைய Calendar:")
-            for event in events:
+            for event in active_events:
                 time_text = ("All day" if lang == "en" else "முழு நாள்") if event.get("all_day") else event["start"].astimezone(settings.timezone).strftime("%I:%M %p")
                 lines.append(f"• {time_text} — {'[HIGH] ' if event.get('priority') == 'High' else ''}{event['title']}")
+            if completed_events:
+                lines.append("Completed Calendar events ✅:" if lang == "en" else "முடித்த Calendar events ✅:")
+                for event in completed_events:
+                    time_text = ("All day" if lang == "en" else "முழு நாள்") if event.get("all_day") else event["start"].astimezone(settings.timezone).strftime("%I:%M %p")
+                    lines.append(f"• {time_text} — {'[HIGH] ' if event.get('priority') == 'High' else ''}{event['title']}")
             if recent_mail:
                 lines.append("\nImportant recent emails:" if lang == "en" else "\nமுக்கியமான recent emails:")
                 for mail in recent_mail:

@@ -169,12 +169,12 @@ Send `/start` once. The first time, the bot asks you to choose Tamil, English, o
 | `/start` | Opens the bot and shows the command menu | `/start` |
 | `/help` | Shows available commands and quick actions | `/help` |
 | `/add <event details>` | Starts a Calendar event capture, asking for confirmation before adding | `/add Tomorrow 5 PM project meeting` |
-| `/plan` | Combines today's Calendar events, pending tasks and upcoming deadlines found in recent important mail, ordered by priority | `/plan` |
+| `/plan` | Combines today's upcoming events, completed Calendar events, pending tasks and upcoming deadlines found in recent important mail | `/plan` |
 | `/findtime [minutes]` | Finds up to five free Calendar slots during 9 AM–6 PM over the next seven days. Defaults to 30 minutes | `/findtime 45` or `/findtime 1 hour` |
 | `/week` | Lists Google Calendar events for the next seven days, grouped by date | `/week` |
-  | `/reschedule` | Selects an upcoming timed event, checks the new time for conflicts, then moves it after confirmation | `/reschedule` |
+| `/reschedule` | Selects an upcoming timed event, checks the new time for conflicts, then moves it after confirmation | `/reschedule` |
 | `/language` | Choose Tamil, English, or Auto. Auto replies in Tamil for Tamil/Tanglish messages and English for English messages | `/language` |
-| `/today` | Shows today's Google Calendar events | `/today` |
+| `/today` | Shows today's Google Calendar events grouped into Upcoming and Completed | `/today` |
 | `/tasks` | Lists captured tasks. Tap **Done** to complete one | `/tasks` |
 | `/status` | Checks Google Calendar access and shows today's event count | `/status` |
 | `/cancel` | Cancels a task that is waiting for a missing date or time | `/cancel` |
@@ -326,7 +326,7 @@ All secrets belong in `.env` locally or the hosting provider's secret environmen
 - Mail cards include the received date in IST and the Read/Unread status Gmail reported at scan time. Press **Reply**, type the exact reply, review the preview, then press **Send reply**; no message is sent before that explicit action. Replies are capped at 3,000 characters and sent in the original Gmail thread.
 - An important email with a future, unambiguous full date matching its exact quoted date evidence may create a High-priority Calendar event automatically only if Strands Decider confidently approves it. Relative dates and ambiguous numeric dates stay on the Yes/No confirmation path. The system schedules the normal reminders for an approved event. If the date is unclear, Decider is uncertain/rejects, or a service fails, no automatic event is created. Date-only items become all-day events; explicit times become one-hour events. Past dates are rejected and stable event IDs prevent duplicates.
 - If Strands or Decider is unavailable, AI task extraction or guarded Calendar writes fail safely; a rejected or uncertain write never reaches Google Calendar. Gmail still reports recent mail with a preview if its hosted AI triage is blocked. Calendar read/reminder features continue.
-  - `/findtime [minutes]` finds up to five free windows in the next seven days during 9 AM–6 PM local time; it defaults to 30 minutes. `/week` lists the same seven-day Calendar horizon grouped by date. `/reschedule` lets you select an upcoming timed event, enter a new date/time, review any overlap, and confirm the move. The event title and duration are preserved, and reminders are refreshed. `/plan` combines today's Calendar events, pending captured tasks, and upcoming deadlines from recent important email.
+  - `/findtime [minutes]` finds up to five free windows in the next seven days during 9 AM–6 PM local time; it defaults to 30 minutes. `/week` lists the same seven-day Calendar horizon grouped by date. `/reschedule` lets you select an upcoming timed event, enter a new date/time, review any overlap, and confirm the move. The event title and duration are preserved, and reminders are refreshed. `/plan` separates completed Calendar events from today's focus, then adds pending captured tasks and upcoming deadlines from recent important email.
 - On first `/start`, choose Tamil, English, or Auto. `/language` changes the saved choice later. Auto uses Tamil for Tamil-script or recognized Tanglish messages and English for English messages. The selection controls replies, Calendar/task flows, Gmail summaries, and scheduled briefs/reminders.
 - When an overlapping event is found during a task or manually suggested email reminder, the bot shows the existing event and lets you add anyway or cancel. A failed conflict check prevents that add.
 - Text and forwarded-message capture extracts a task, future date/time, and High/Medium/Low priority. If date or time is missing, the bot asks for it and keeps one pending clarification; answer it or use `/cancel` before starting another capture.

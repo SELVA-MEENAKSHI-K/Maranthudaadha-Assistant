@@ -103,6 +103,10 @@ class Store:
                     due_at TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'pending'
                 );
+                CREATE TABLE IF NOT EXISTS completed_events (
+                    event_id TEXT PRIMARY KEY,
+                    completed_at TEXT NOT NULL
+                );
             """)
             reminder_columns = {row[1] for row in db.execute("PRAGMA table_info(reminders)")}
             if "priority" not in reminder_columns:
@@ -317,10 +321,26 @@ class Store:
             result = db.execute("UPDATE captures SET status='done', done_at=? WHERE capture_id=? AND status='created'",
                                 (datetime.now(timezone.utc).isoformat(), capture_id))
             if result.rowcount:
+                capture = db.execute("SELECT event_id FROM captures WHERE capture_id=?", (capture_id,)).fetchone()
+                if capture and capture["event_id"]:
+                    db.execute("INSERT INTO completed_events(event_id, completed_at) VALUES(?, ?) ON CONFLICT(event_id) DO NOTHING",
+                               (capture["event_id"], datetime.now(timezone.utc).isoformat()))
                 db.execute("UPDATE reminders SET status='done' WHERE event_id=(SELECT event_id FROM captures WHERE capture_id=?) AND status='pending'", (capture_id,))
                 db.execute("UPDATE snoozes SET status='done' WHERE event_id=(SELECT event_id FROM captures WHERE capture_id=?) AND status='pending'", (capture_id,))
                 db.execute("UPDATE reminder_actions SET status='done' WHERE event_id=(SELECT event_id FROM captures WHERE capture_id=?) AND status='pending'", (capture_id,))
             return result.rowcount == 1
+
+    def completed_event_ids(self, event_ids: list[str]) -> set[str]:
+        if not event_ids:
+            return set()
+        placeholders = ",".join("?" for _ in event_ids)
+        with self.connect() as db:
+            rows = db.execute(
+                f"SELECT event_id FROM completed_events WHERE event_id IN ({placeholders}) "
+                f"UNION SELECT event_id FROM captures WHERE status='done' AND event_id IN ({placeholders})",
+                (*event_ids, *event_ids),
+            ).fetchall()
+            return {row["event_id"] for row in rows}
 
     def weekly_tasks(self, start: datetime, end: datetime) -> tuple[list[sqlite3.Row], list[sqlite3.Row]]:
         start_utc, end_utc = start.astimezone(timezone.utc).isoformat(), end.astimezone(timezone.utc).isoformat()
@@ -360,6 +380,8 @@ class Store:
 
     def mark_event_done(self, event_id: str) -> None:
         with self.connect() as db:
+            db.execute("INSERT INTO completed_events(event_id, completed_at) VALUES(?, ?) ON CONFLICT(event_id) DO NOTHING",
+                       (event_id, datetime.now(timezone.utc).isoformat()))
             db.execute("UPDATE reminders SET status='done' WHERE event_id=? AND status='pending'", (event_id,))
             db.execute("UPDATE snoozes SET status='done' WHERE event_id=? AND status='pending'", (event_id,))
             db.execute("UPDATE reminder_actions SET status='done' WHERE event_id=? AND status='pending'", (event_id,))

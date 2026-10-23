@@ -339,10 +339,17 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         events = await asyncio.to_thread(calendar.today_events, datetime.now(ZoneInfo(calendar.settings.timezone_name)))
         if not events:
             return await update.effective_message.reply_text("There are no Calendar events today 🙂" if lang == "en" else "இன்று Calendar-ல் events எதுவும் இல்லை 🙂")
+        completed_ids = context.application.bot_data["store"].completed_event_ids([event["id"] for event in events])
+        completed = [event for event in events if event["id"] in completed_ids]
+        upcoming = [event for event in events if event["id"] not in completed_ids]
         lines = ["Today's events:" if lang == "en" else "இன்றைய events:"]
-        for event in events:
-            start_at = ("All day" if lang == "en" else "முழு நாள்") if event.get("all_day") else event["start"].astimezone(calendar.settings.timezone).strftime("%I:%M %p")
-            lines.append(f"• {start_at} — {'[HIGH] ' if event.get('priority') == 'High' else ''}{event['title']}")
+        for heading, group in (("Upcoming", upcoming), ("Completed ✅", completed)) if lang == "en" else (("வரவிருக்கும் events", upcoming), ("முடித்த events ✅", completed)):
+            if not group:
+                continue
+            lines.append(f"\n{heading}:")
+            for event in group:
+                start_at = ("All day" if lang == "en" else "முழு நாள்") if event.get("all_day") else event["start"].astimezone(calendar.settings.timezone).strftime("%I:%M %p")
+                lines.append(f"• {start_at} — {'[HIGH] ' if event.get('priority') == 'High' else ''}{event['title']}")
         await update.effective_message.reply_text("\n".join(lines))
     except CalendarNotAuthorized as exc:
         await update.effective_message.reply_text(_calendar_error(exc, lang))
@@ -411,12 +418,17 @@ async def daily_plan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     priority_rank = {"High": 0, "Medium": 1, "Low": 2}
     focus_items: list[tuple[int, str, str]] = []
+    completed_event_items: list[tuple[str, str]] = []
+    completed_event_ids = store.completed_event_ids([event["id"] for event in events])
     for event in events:
         start_at = event["start"].astimezone(settings.timezone)
         when = "All day" if event.get("all_day") else start_at.strftime("%I:%M %p")
         priority = event.get("priority", "Medium")
-        focus_items.append((priority_rank.get(priority, 1), start_at.isoformat(),
-                            f"{when} — [{priority.upper()}] {event['title']} (Calendar)"))
+        detail = f"{when} — [{priority.upper()}] {event['title']} (Calendar)"
+        if event["id"] in completed_event_ids:
+            completed_event_items.append((start_at.isoformat(), detail))
+        else:
+            focus_items.append((priority_rank.get(priority, 1), start_at.isoformat(), detail))
 
     status_labels = {
         "awaiting_date": "needs a date",
@@ -462,10 +474,13 @@ async def daily_plan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     deadlines.sort(key=lambda item: item[0])
 
     lines = [f"🗓️ Today's plan — {now.strftime('%a, %d %b')}" if lang == "en" else f"🗓️ Innaikku plan — {now.strftime('%a, %d %b')}"]
+    if completed_event_items:
+        lines.append("\nCompleted Calendar events ✅:" if lang == "en" else "\nமுடித்த Calendar events ✅:")
+        lines.extend(f"• {item[1]}" for item in sorted(completed_event_items)[:20])
     if focus_items:
         lines.append("\nToday's focus (High → Low):" if lang == "en" else "\nஇன்றைய முக்கிய வேலைகள் (High → Low):")
         lines.extend(f"• {item[2]}" for item in focus_items[:20])
-    else:
+    elif not completed_event_items:
         lines.append("\nNo Calendar events or pending tasks 🙂" if lang == "en" else "\nCalendar events or pending tasks ethum illa 🙂")
     if deadlines:
         lines.append("\n📧 Upcoming email deadlines:" if lang == "en" else "\n📧 வரவிருக்கும் email deadlines:")
@@ -728,8 +743,9 @@ async def _capture_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
         return
     except Exception:
         lang = response_language(context, text)
+        log.exception("Task capture analysis failed")
         await update.effective_message.reply_text(
-            "I couldn't understand that task. Please rephrase it; no event was created." if lang == "en" else "Task-a purinjukka mudiyala. Konjam clear-ah anuppunga; event create pannala."
+            "I couldn't process that task right now. No event was created; please retry shortly or rephrase it." if lang == "en" else "Task-ai ippo process panna mudiyala. Event create pannala; konjam neram kazhichu retry pannunga, illa clear-ah rephrase pannunga."
         )
         return
     record = _analysis_record(source, result, capture_id, bool(waiting["direct_requested"]) if waiting else direct)

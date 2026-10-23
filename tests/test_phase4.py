@@ -72,6 +72,7 @@ class StorePhase4Tests(unittest.TestCase):
         self.assertEqual(claimed["event_id"], "evt-high")
         self.assertIsNone(self.store.claim_reminder_action(action, "s1"))
         self.store.mark_event_done("evt-high")
+        self.assertEqual(self.store.completed_event_ids(["evt-high"]), {"evt-high"})
         self.assertEqual(self.store.due_reminders(start), [])
 
     def test_snooze_is_persisted_and_due(self):
@@ -94,6 +95,7 @@ class StorePhase4Tests(unittest.TestCase):
         self.store.finish_capture(capture_id, "created", "evt-task")
         self.assertTrue(self.store.mark_capture_done(capture_id))
         self.assertFalse(self.store.mark_capture_done(capture_id))
+        self.assertEqual(self.store.completed_event_ids(["evt-task"]), {"evt-task"})
         now = datetime.now(timezone.utc)
         completed, pending = self.store.weekly_tasks(now - timedelta(days=1), now + timedelta(seconds=1))
         self.assertEqual([row["title"] for row in completed], ["Finish assignment"])
