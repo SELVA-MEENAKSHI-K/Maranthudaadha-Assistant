@@ -2,6 +2,15 @@
 
 A private Telegram assistant that reads Google Calendar, sends event reminders, scans selected Gmail messages every 30 minutes, accepts typed/forwarded tasks and voice notes, and sends a calendar/email brief at **7:00 AM Asia/Kolkata**. Text understanding and email triage run through **Strands Agents** on the provided Strands-compatible hosted model. Every Calendar write passes a Strands `before_tool_call` intervention backed by **Strands Decider 2B**. This project does not use Amazon Bedrock or AWS credentials.
 
+## Recent feature highlights
+
+- **Tamil, English, or Auto replies:** choose the language during `/start` or change it later with `/language`. Auto replies in Tamil for Tamil/Tanglish messages and English for English messages, including scheduled updates.
+- **Safer Calendar planning:** `/today` separates upcoming and completed events. `/plan` brings together today's focus, completed events, pending tasks, and upcoming email deadlines.
+- **Conflict-aware event capture and rescheduling:** before creating a captured task or email reminder, the bot checks for overlapping events. `/reschedule` checks the new time for conflicts and moves an event only after confirmation.
+- **Gmail at a glance:** `/scanmail` shows Inbox messages received in the last five hours, grouped by Seen/Read and Unseen/Unread, with reviewed reply sending and safe fallbacks when AI triage is unavailable.
+- **Tasks and reminders:** mark captured tasks or reminder events Done, or snooze reminders for one hour or until tomorrow. The weekly review summarizes completed and pending tasks.
+- **Notion notes and voice capture:** save/search notes with Notion and turn voice notes into tasks when the optional Gemini transcription key is configured.
+
 Phase 2 adds Strands-based Gmail triage, received date and Gmail Read/Unread status, reply drafting with an explicit Send confirmation and a Decider-backed policy review before send, and automatic Calendar reminders for important emails only when the date is explicitly quoted and Strands Decider confidently approves. Uncertain, rejected, or failed automatic decisions keep the Yes/No Calendar prompt. Phase 3 adds inbox capture and Telegram voice notes: details are extracted into a structured task, missing date/time is clarified, and a complete event requires Yes unless the user explicitly says “direct ah add pannu”. The exact Calendar tool call still passes through Decider before it runs. High-priority events receive additional reminders. Phase 4 adds Notion note save/search, reminder snooze and Done buttons, a task list, and a Sunday 8 PM weekly review.
 
 ## Project structure
