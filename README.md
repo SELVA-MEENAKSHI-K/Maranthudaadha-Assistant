@@ -154,11 +154,11 @@ Follow these steps in order. Open **PowerShell** in the `Maranthudaadha-Assistan
 
     To restart later, press **Ctrl+C** in the bot's PowerShell window and run the same start command again.
 
-11. Open your bot in Telegram and send `/start`. The bot shows the command menu and quick buttons. Opening the chat by itself does not send `/start`, so send it once to see the welcome message and keyboard.
+11. Open your bot in Telegram and send `/start`. The first start asks you to choose Tamil, English, or Auto; after you choose, the bot shows its welcome message and quick-command keyboard. Opening the chat by itself does not send `/start`.
 
 ## 🤖 How to use the Telegram bot
 
-Send `/start` once to open the welcome message and quick-command keyboard. Then tap a command from the menu, or just send a normal message.
+Send `/start` once. The first time, the bot asks you to choose Tamil, English, or Auto for replies across the bot. You can change this anytime with `/language`. Then tap a command from the menu, or send a normal message; Auto replies in Tamil for Tamil/Tanglish messages and in English for English messages.
 
 > 💡 **`/tasks` only lists tasks. It does not create one.** To create a task, send its details as a normal message, for example `Tomorrow 5 PM project meeting`.
 
@@ -169,10 +169,16 @@ Send `/start` once to open the welcome message and quick-command keyboard. Then 
 | `/start` | Opens the bot and shows the command menu | `/start` |
 | `/help` | Shows available commands and quick actions | `/help` |
 | `/add <event details>` | Starts a Calendar event capture, asking for confirmation before adding | `/add Tomorrow 5 PM project meeting` |
+| `/plan` | Combines today's Calendar events, pending tasks and upcoming deadlines found in recent important mail, ordered by priority | `/plan` |
+| `/findtime [minutes]` | Finds up to five free Calendar slots during 9 AM–6 PM over the next seven days. Defaults to 30 minutes | `/findtime 45` or `/findtime 1 hour` |
+| `/week` | Lists Google Calendar events for the next seven days, grouped by date | `/week` |
+| `/language` | Choose Tamil, English, or Auto. Auto replies in Tamil for Tamil/Tanglish messages and English for English messages | `/language` |
 | `/today` | Shows today's Google Calendar events | `/today` |
 | `/tasks` | Lists captured tasks. Tap **Done** to complete one | `/tasks` |
 | `/status` | Checks Google Calendar access and shows today's event count | `/status` |
 | `/cancel` | Cancels a task that is waiting for a missing date or time | `/cancel` |
+
+Before adding a captured task or a manually suggested email reminder, the bot checks for overlapping Calendar events. If there is a conflict, it shows the existing event and asks whether to add anyway or cancel. A conflict check failure stops the add so the event is not created without a check.
 
 ### 📧 Gmail
 
@@ -185,6 +191,8 @@ On each email card you can:
 - Check the received time and **Read/Unread** status.
 - Tap **Yes / No** to add or skip a suggested Calendar reminder. Some clear, explicitly quoted dates may be added automatically after the safety check approves them.
 - Tap **Reply to Gmail**, type your reply, review the preview, then tap **Send reply**. A Telegram quote reply alone does not send an email.
+
+If the hosted AI service is blocked or unavailable, `/scanmail` still saves and displays the Gmail preview with its Seen/Unread status. It skips AI classification and automatic Calendar suggestions for that message.
 
 ### 📝 Notion notes
 
@@ -313,10 +321,13 @@ All secrets belong in `.env` locally or the hosting provider's secret environmen
 - At 07:00 IST, the bot lists today's Calendar events.
 - Google OAuth tokens are encrypted in SQLite using `TOKEN_ENCRYPTION_KEY`.
 - Gmail reports Inbox mail received in the last five hours, grouped as Seen/Read and Unseen/Unread. Attachments are not downloaded. The scan checks the last day through Gmail and applies an exact five-hour timestamp cutoff locally.
-- Matching academic/career email content is sent to the configured Strands model for classification, summary, and date extraction. Other mail uses Gmail's short preview and is not sent to the model. Raw body text is used in memory and not saved; SQLite keeps IDs, subject/sender, short summary, extracted date/evidence, and your decision.
+- Matching academic/career email content is sent to the configured Strands model for classification, summary, and date extraction. Other mail uses Gmail's short preview and is not sent to the model. If the hosted model request fails or is blocked, the message is still reported using its Gmail preview, with AI classification and Calendar suggestions skipped. Raw body text is used in memory and not saved; SQLite keeps IDs, subject/sender, short summary, extracted date/evidence, and your decision.
 - Mail cards include the received date in IST and the Read/Unread status Gmail reported at scan time. Press **Reply**, type the exact reply, review the preview, then press **Send reply**; no message is sent before that explicit action. Replies are capped at 3,000 characters and sent in the original Gmail thread.
 - An important email with a future, unambiguous full date matching its exact quoted date evidence may create a High-priority Calendar event automatically only if Strands Decider confidently approves it. Relative dates and ambiguous numeric dates stay on the Yes/No confirmation path. The system schedules the normal reminders for an approved event. If the date is unclear, Decider is uncertain/rejects, or a service fails, no automatic event is created. Date-only items become all-day events; explicit times become one-hour events. Past dates are rejected and stable event IDs prevent duplicates.
-- If Strands or Decider is unavailable, AI capture/triage or Calendar writes fail safely; a rejected or uncertain write never reaches Google Calendar. Calendar read/reminder features continue.
+- If Strands or Decider is unavailable, AI task extraction or guarded Calendar writes fail safely; a rejected or uncertain write never reaches Google Calendar. Gmail still reports recent mail with a preview if its hosted AI triage is blocked. Calendar read/reminder features continue.
+- `/findtime [minutes]` finds up to five free windows in the next seven days during 9 AM–6 PM local time; it defaults to 30 minutes. `/week` lists the same seven-day Calendar horizon grouped by date. `/plan` combines today's Calendar events, pending captured tasks, and upcoming deadlines from recent important email.
+- On first `/start`, choose Tamil, English, or Auto. `/language` changes the saved choice later. Auto uses Tamil for Tamil-script or recognized Tanglish messages and English for English messages. The selection controls replies, Calendar/task flows, Gmail summaries, and scheduled briefs/reminders.
+- When an overlapping event is found during a task or manually suggested email reminder, the bot shows the existing event and lets you add anyway or cancel. A failed conflict check prevents that add.
 - Text and forwarded-message capture extracts a task, future date/time, and High/Medium/Low priority. If date or time is missing, the bot asks for it and keeps one pending clarification; answer it or use `/cancel` before starting another capture.
 - A complete capture shows Yes/No. Calendar creation happens only after Yes, except for an explicit unforwarded “direct ah add pannu” instruction. Forwarded text cannot grant that bypass. Failed or rejected captures do not create events.
 - Voice messages are limited to 20 MB and 5 minutes by default. With optional `GEMINI_API_KEY`, their Telegram voice bytes are temporarily uploaded for transcription and local/remote copies are deleted best-effort. The transcript goes through the same Strands and confirmation flow; audio is not stored in SQLite.

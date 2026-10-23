@@ -12,15 +12,18 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from assistant.google_calendar import CalendarNotAuthorized, GoogleCalendar
 from assistant.gmail import scan_gmail
 from assistant.store import Store
+from assistant.language import response_language
 
 log = logging.getLogger(__name__)
 
 
 def reminder_keyboard(store: Store, row) -> InlineKeyboardMarkup:
     token = store.create_reminder_action(row)
-    return InlineKeyboardMarkup([[InlineKeyboardButton("Snooze 1h", callback_data=f"rem:s1:{token}"),
-                                  InlineKeyboardButton("Tomorrow", callback_data=f"rem:tom:{token}"),
-                                  InlineKeyboardButton("Done", callback_data=f"rem:done:{token}")]])
+    lang = response_language(store)
+    labels = ("Snooze 1h", "Tomorrow", "Done") if lang == "en" else ("1 மணி ஒத்திவை", "நாளை", "முடிந்தது")
+    return InlineKeyboardMarkup([[InlineKeyboardButton(labels[0], callback_data=f"rem:s1:{token}"),
+                                  InlineKeyboardButton(labels[1], callback_data=f"rem:tom:{token}"),
+                                  InlineKeyboardButton(labels[2], callback_data=f"rem:done:{token}")]])
 
 
 async def sync_calendar(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -43,17 +46,20 @@ async def sync_calendar(context: ContextTypes.DEFAULT_TYPE) -> None:
 async def send_due_reminders(context: ContextTypes.DEFAULT_TYPE) -> None:
     settings = context.application.bot_data["settings"]
     store: Store = context.application.bot_data["store"]
+    lang = response_language(store)
     now = datetime.now(settings.timezone)
     for row in store.due_reminders(now):
         event_start = datetime.fromisoformat(row["event_start"]).astimezone(settings.timezone)
         when = event_start.strftime("%a, %d %b at %I:%M %p")
-        lead_text = {1440: "1 நாள்", 720: "12 மணி நேரம்", 180: "3 மணி நேரம்",
-                     60: "1 மணி நேரம்", 30: "30 நிமிடம்", 15: "15 நிமிடம்"}[row["lead_minutes"]]
+        lead_text = ({1440: "1 day", 720: "12 hours", 180: "3 hours", 60: "1 hour", 30: "30 minutes", 15: "15 minutes"}
+                     if lang == "en" else {1440: "1 நாள்", 720: "12 மணி நேரம்", 180: "3 மணி நேரம்",
+                                          60: "1 மணி நேரம்", 30: "30 நிமிடம்", 15: "15 நிமிடம்"})[row["lead_minutes"]]
         try:
             priority_label = f"[{row['priority'].upper()}] "
             await context.bot.send_message(
                 chat_id=settings.telegram_user_id,
-                text=f"⏰ இன்னும் {lead_text}ல் event\n{priority_label}{row['event_title']}\n{when}",
+                text=(f"⏰ Event in {lead_text}\n{priority_label}{row['event_title']}\n{when}" if lang == "en"
+                      else f"⏰ இன்னும் {lead_text}ல் event\n{priority_label}{row['event_title']}\n{when}"),
                 reply_markup=reminder_keyboard(store, row),
             )
             store.mark_sent(row["event_id"], row["lead_minutes"], now)
@@ -64,7 +70,7 @@ async def send_due_reminders(context: ContextTypes.DEFAULT_TYPE) -> None:
             action_row = {"event_id": row["event_id"], "event_title": row["event_title"],
                           "event_start": row["event_start"], "priority": row["priority"]}
             await context.bot.send_message(chat_id=settings.telegram_user_id,
-                text=f"🔔 Snoozed reminder\n[{row['priority'].upper()}] {row['event_title']}\n"
+                text=f"🔔 {'Snoozed reminder' if lang == 'en' else 'ஒத்திவைத்த நினைவூட்டல்'}\n[{row['priority'].upper()}] {row['event_title']}\n"
                      f"{datetime.fromisoformat(row['event_start']).astimezone(settings.timezone).strftime('%a, %d %b at %I:%M %p')}",
                 reply_markup=reminder_keyboard(store, action_row))
             store.mark_snooze_sent(row["snooze_id"])
@@ -75,24 +81,27 @@ async def send_due_reminders(context: ContextTypes.DEFAULT_TYPE) -> None:
 async def morning_brief(context: ContextTypes.DEFAULT_TYPE) -> None:
     settings = context.application.bot_data["settings"]
     calendar: GoogleCalendar = context.application.bot_data["calendar"]
+    store: Store = context.application.bot_data["store"]
+    lang = response_language(store)
     now = datetime.now(settings.timezone)
     try:
         events = await asyncio.to_thread(calendar.today_events, now)
-        recent_mail = context.application.bot_data["store"].recent_important_emails(now - timedelta(days=1))
+        recent_mail = store.recent_important_emails(now - timedelta(days=1))
         if events or recent_mail:
-            lines = ["🌅 காலை வணக்கம்!"]
+            lines = ["🌅 Good morning!" if lang == "en" else "🌅 காலை வணக்கம்!"]
             if events:
-                lines.append("இன்றைய Calendar:")
+                lines.append("Today's Calendar:" if lang == "en" else "இன்றைய Calendar:")
             for event in events:
-                time_text = "முழு நாள்" if event.get("all_day") else event["start"].astimezone(settings.timezone).strftime("%I:%M %p")
+                time_text = ("All day" if lang == "en" else "முழு நாள்") if event.get("all_day") else event["start"].astimezone(settings.timezone).strftime("%I:%M %p")
                 lines.append(f"• {time_text} — {'[HIGH] ' if event.get('priority') == 'High' else ''}{event['title']}")
             if recent_mail:
-                lines.append("\nமுக்கியமான recent emails:")
+                lines.append("\nImportant recent emails:" if lang == "en" else "\nமுக்கியமான recent emails:")
                 for mail in recent_mail:
                     lines.append(f"• [{mail['category']}] {mail['subject']}: {mail['summary']}")
             message = "\n".join(lines)
         else:
-            message = "🌅 காலை வணக்கம்! இன்று Calendar events அல்லது முக்கிய email இல்லை. நல்ல நாளாகட்டும் 🙂"
+            message = ("🌅 Good morning! No Calendar events or important emails today. Have a nice day 🙂" if lang == "en"
+                       else "🌅 காலை வணக்கம்! இன்று Calendar events அல்லது முக்கிய email இல்லை. நல்ல நாளாகட்டும் 🙂")
         await context.bot.send_message(chat_id=settings.telegram_user_id, text=message)
     except CalendarNotAuthorized:
         log.warning("Skipping morning brief because Google Calendar is not connected")
@@ -104,6 +113,7 @@ async def weekly_review(context: ContextTypes.DEFAULT_TYPE) -> None:
     settings = context.application.bot_data["settings"]
     store: Store = context.application.bot_data["store"]
     calendar: GoogleCalendar = context.application.bot_data["calendar"]
+    lang = response_language(store)
     now = datetime.now(settings.timezone)
     completed, pending = store.weekly_tasks(now - timedelta(days=7), now)
     next_monday = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=(7 - now.weekday()) % 7 or 7)
@@ -113,19 +123,19 @@ async def weekly_review(context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception:
         log.exception("Weekly review could not fetch next week's events")
         next_events = []
-    lines = ["🗓️ Weekly review"]
-    lines.append(f"\n✅ Completed this week ({len(completed)}):")
+    lines = ["🗓️ Weekly review" if lang == "en" else "🗓️ வாராந்திர review"]
+    lines.append(f"\n✅ Completed this week ({len(completed)}):" if lang == "en" else f"\n✅ இந்த வாரம் முடித்தவை ({len(completed)}):")
     lines.extend(f"• {row['title']}" for row in completed[:12])
     if not completed:
-        lines.append("• Completed tasks were not marked this week.")
-    lines.append(f"\n📌 Pending ({len(pending)}):")
-    lines.extend(f"• {row['title']} — {row['event_date'] or 'date missing'} {row['event_time'] or ''} [{row['priority']}]" for row in pending[:15])
+        lines.append("• No tasks were marked complete this week." if lang == "en" else "• இந்த வாரம் முடித்ததாக task mark செய்யவில்லை.")
+    lines.append(f"\n📌 Pending ({len(pending)}):" if lang == "en" else f"\n📌 நிலுவையில் ({len(pending)}):")
+    lines.extend(f"• {row['title']} — {row['event_date'] or ('date missing' if lang == 'en' else 'தேதி இல்லை')} {row['event_time'] or ''} [{row['priority']}]" for row in pending[:15])
     if not pending:
-        lines.append("• No pending captured tasks.")
-    lines.append("\n📅 Next week:")
+        lines.append("• No pending tasks." if lang == "en" else "• நிலுவையில் tasks இல்லை.")
+    lines.append("\n📅 Next week:" if lang == "en" else "\n📅 அடுத்த வாரம்:")
     lines.extend(f"• {event['start'].astimezone(settings.timezone).strftime('%a %d %b %I:%M %p') if not event.get('all_day') else event['start'].strftime('%a %d %b')} — {event['title']}" for event in next_events[:15])
     if not next_events:
-        lines.append("• No Calendar events found.")
+        lines.append("• No Calendar events found." if lang == "en" else "• Calendar events எதுவும் இல்லை.")
     await context.bot.send_message(chat_id=settings.telegram_user_id, text="\n".join(lines)[:3900])
 
 

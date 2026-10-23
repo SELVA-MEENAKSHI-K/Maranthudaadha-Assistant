@@ -11,8 +11,9 @@ from assistant.email_intelligence import StrandsEmailTriage
 from assistant.gmail import GmailReader
 from assistant.google_calendar import GoogleCalendar
 from assistant.handlers import (add_event_command, cancel_capture, capture_callback, capture_message, gmail_callback, gmail_reply_callback,
-                                list_tasks, note_command, notion_status, reminder_action_callback, scan_mail_now,
-                                search_notes_command, start, status, task_done_callback, today, unknown_command, voice_message)
+                                daily_plan, find_time, language_callback, language_command, list_tasks, note_command, notion_status,
+                                reminder_action_callback, scan_mail_now, search_notes_command, start, status, task_done_callback,
+                                today, week, unknown_command, voice_message)
 from assistant.capture import StrandsCapture
 from assistant.jobs import register_jobs
 from assistant.store import Store
@@ -25,9 +26,13 @@ async def setup_command_menu(application: Application) -> None:
         BotCommand("start", "Open assistant and quick actions"),
         BotCommand("help", "Show commands and how to use them"),
         BotCommand("add", "Add an event to Google Calendar"),
+        BotCommand("plan", "Show today's events, tasks and email deadlines"),
+        BotCommand("findtime", "Find free Calendar slots in the next 7 days"),
+        BotCommand("week", "Show Calendar events for the next 7 days"),
+        BotCommand("language", "Choose Tamil, English or automatic replies"),
         BotCommand("today", "Show today's Calendar events"),
         BotCommand("tasks", "Show pending captured tasks"),
-        BotCommand("scanmail", "Check important Gmail messages"),
+        BotCommand("scanmail", "Show recent Gmail mail by read status"),
         BotCommand("status", "Check Google connection"),
         BotCommand("searchnotes", "List all notes or search by words"),
         BotCommand("notion", "Check or enable Notion notes"),
@@ -59,6 +64,10 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", start))
     app.add_handler(CommandHandler("add", add_event_command))
+    app.add_handler(CommandHandler("plan", daily_plan))
+    app.add_handler(CommandHandler("findtime", find_time))
+    app.add_handler(CommandHandler("week", week))
+    app.add_handler(CommandHandler("language", language_command))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("today", today))
     app.add_handler(CommandHandler("scanmail", scan_mail_now))
@@ -68,9 +77,10 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("notion", notion_status))
     app.add_handler(CommandHandler("tasks", list_tasks))
     app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
-    app.add_handler(CallbackQueryHandler(gmail_callback, pattern=r"^mail:(yes|no|reply):[A-Za-z0-9_-]{1,45}$"))
+    app.add_handler(CallbackQueryHandler(gmail_callback, pattern=r"^mail:(yes|no|reply|force):[A-Za-z0-9_-]{1,45}$"))
+    app.add_handler(CallbackQueryHandler(language_callback, pattern=r"^lang:(ta|en|auto)$"))
     app.add_handler(CallbackQueryHandler(gmail_reply_callback, pattern=r"^mailreply:(send|override|cancel)$"))
-    app.add_handler(CallbackQueryHandler(capture_callback, pattern=r"^capture:(yes|no):[0-9a-f]{32}$"))
+    app.add_handler(CallbackQueryHandler(capture_callback, pattern=r"^capture:(yes|no|force):[0-9a-f]{32}$"))
     app.add_handler(CallbackQueryHandler(reminder_action_callback, pattern=r"^rem:(s1|tom|done):[0-9a-f]{32}$"))
     app.add_handler(CallbackQueryHandler(task_done_callback, pattern=r"^task:done:[0-9a-f]{32}$"))
     app.add_handler(MessageHandler(filters.VOICE, voice_message))

@@ -131,6 +131,19 @@ class Store:
             row = db.execute("SELECT encrypted_value FROM tokens WHERE name='google'").fetchone()
             return bytes(row[0]) if row else None
 
+    def get_preference(self, name: str, default: str | None = None) -> str | None:
+        with self.connect() as db:
+            row = db.execute("SELECT value FROM app_metadata WHERE name=?", (name,)).fetchone()
+            return row["value"] if row else default
+
+    def set_preference(self, name: str, value: str) -> None:
+        with self.connect() as db:
+            db.execute(
+                "INSERT INTO app_metadata(name, value) VALUES(?, ?) "
+                "ON CONFLICT(name) DO UPDATE SET value=excluded.value",
+                (name, value),
+            )
+
     def reconcile_reminders(self, events: list[dict], now: datetime) -> None:
         """Upsert reminders for current events; preserve already delivered reminders."""
         active_ids = [event["id"] for event in events]
@@ -256,7 +269,7 @@ class Store:
         since_utc = since.astimezone(timezone.utc).isoformat()
         with self.connect() as db:
             return db.execute(
-                "SELECT subject, summary, category FROM gmail_messages "
+                "SELECT subject, summary, category, deadline_iso, action_status FROM gmail_messages "
                 "WHERE important=1 AND received_at>=? ORDER BY received_at DESC LIMIT 10",
                 (since_utc,),
             ).fetchall()

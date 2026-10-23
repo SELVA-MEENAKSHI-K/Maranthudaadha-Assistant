@@ -76,7 +76,15 @@ class GoogleCalendar:
                     start_at = datetime.fromisoformat(raw_start["date"]).replace(tzinfo=self.settings.timezone)
                 else:
                     continue
+                raw_end = item.get("end", {})
+                if raw_end.get("dateTime"):
+                    end_at = datetime.fromisoformat(raw_end["dateTime"].replace("Z", "+00:00"))
+                elif raw_end.get("date"):
+                    end_at = datetime.fromisoformat(raw_end["date"]).replace(tzinfo=self.settings.timezone)
+                else:
+                    continue
                 events.append({"id": item["id"], "title": item.get("summary", "(Title not set)"), "start": start_at,
+                               "end": end_at,
                                "all_day": bool(raw_start.get("date")),
                                "priority": item.get("extendedProperties", {}).get("private", {}).get("agent_priority", "Medium")})
             page_token = response.get("nextPageToken")

@@ -17,6 +17,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from assistant.email_intelligence import StrandsEmailTriage
 from assistant.google_calendar import GoogleCalendar
 from assistant.store import Store
+from assistant.language import response_language
 
 log = logging.getLogger(__name__)
 # Gmail search's relative units are day-based; scan the last day, then enforce
@@ -187,6 +188,7 @@ async def scan_gmail(context, manual: bool = False) -> int:
         return 0
     reader: GmailReader = context.application.bot_data["gmail_reader"]
     store: Store = context.application.bot_data["store"]
+    lang = response_language(store)
     processed = 0
     scan_ok = False
     sent_count = 0
@@ -209,17 +211,30 @@ async def scan_gmail(context, manual: bool = False) -> int:
                     continue
                 record = {key: value for key, value in message.items() if key not in {"body", "snippet"}}
                 text_for_triage = f"{message['subject']}\n{message['sender']}\n{message['body']}".casefold()
+                analysis = None
                 if any(term in text_for_triage for term in EMAIL_TRIAGE_TERMS):
                     # Keep the existing hosted-model triage limited to mail that
                     # matches the assistant's academic/career relevance terms.
-                    analysis = await asyncio.to_thread(
-                        triage.analyze,
-                        subject=message["subject"],
-                        sender=message["sender"],
-                        received_at=received_at,
-                        body=message["body"],
-                    )
-                    record.update(analysis.model_dump())
+                    try:
+                        analysis = await asyncio.to_thread(
+                            triage.analyze,
+                            subject=message["subject"],
+                            sender=message["sender"],
+                            received_at=received_at,
+                            body=message["body"],
+                            response_language=lang,
+                        )
+                        record.update(analysis.model_dump())
+                    except Exception as exc:
+                        # A blocked/unavailable hosted AI endpoint must not hide recent mail.
+                        log.warning("Email triage unavailable for %s (%s); storing Gmail preview",
+                                    message_id, type(exc).__name__)
+                        preview = " ".join((message["snippet"] or message["body"] or "").split())[:700]
+                        fallback = (("AI summary unavailable. Gmail preview: " if lang == "en"
+                                     else "AI சுருக்கம் கிடைக்கவில்லை. மெயில் முன்னோட்டம்: ") +
+                                    (preview or ("No preview available." if lang == "en" else "முன்னோட்டம் இல்லை.")))
+                        record.update(important=False, category="other", summary=fallback,
+                                      deadline_iso=None, date_evidence="")
                 else:
                     record.update(
                         important=False,
@@ -232,7 +247,7 @@ async def scan_gmail(context, manual: bool = False) -> int:
                 processed += 1
                 # Auto-create only for a verified, future explicit date. Any Decider
                 # uncertainty/rejection falls back to the normal Yes/No prompt.
-                if (analysis.important and analysis.deadline_iso and analysis.date_evidence
+                if (analysis and analysis.important and analysis.deadline_iso and analysis.date_evidence
                         and _quoted_absolute_date_matches(analysis.date_evidence, analysis.deadline_iso, settings.timezone)):
                     try:
                         from assistant.strands_calendar import CalendarGuardError, create_calendar_event_with_strands
@@ -272,11 +287,9 @@ async def scan_gmail(context, manual: bool = False) -> int:
                 failed_count += 1
 
         recent_rows = store.unnotified_emails(cutoff.isoformat())
-        groups = (
-            (True, "📬 Unseen / Unread mails"),
-            (False, "📭 Seen / Read mails"),
-            (None, "📨 Mails with unknown read status"),
-        )
+        groups = ((True, "📬 Unseen / Unread mails" if lang == "en" else "📬 பார்க்காத மெயில்கள்"),
+                  (False, "📭 Seen / Read mails" if lang == "en" else "📭 பார்த்த மெயில்கள்"),
+                  (None, "📨 Mails with unknown read status" if lang == "en" else "📨 படித்த நிலை தெரியாத மெயில்கள்"))
         for unread_value, heading in groups:
             rows = [row for row in recent_rows if row["is_unread"] == unread_value]
             if not rows:
@@ -287,20 +300,24 @@ async def scan_gmail(context, manual: bool = False) -> int:
             )
             for row in rows:
                 local_received = datetime.fromisoformat(row["received_at"]).astimezone(settings.timezone)
-                seen_label = "Unseen / Unread" if row["is_unread"] else "Seen / Read"
+                seen_label = (("Unseen / Unread" if lang == "en" else "பார்க்காதது") if row["is_unread"]
+                              else ("Seen / Read" if lang == "en" else "பார்த்தது"))
                 text = (f"📩 {row['subject']}\nFrom: {row['sender']}\n"
                         f"Received: {local_received.strftime('%d %b %Y, %I:%M %p')} IST · {seen_label}\n"
                         f"[{row['category']}] {row['summary']}")
                 buttons = []
+                yes_label, no_label, reply_label = (("Yes", "No", "✉️ Reply to Gmail") if lang == "en"
+                                                    else ("ஆம்", "வேண்டாம்", "✉️ Gmail-க்கு பதில்"))
                 if row["important"] and row["action_status"] == "pending" and row["deadline_iso"]:
-                    text += f"\nDate/deadline: {row['deadline_iso']}\nCalendar-la add pannattuma?"
+                    text += (f"\nDate/deadline: {row['deadline_iso']}\nAdd this to Calendar?" if lang == "en"
+                             else f"\nDate/deadline: {row['deadline_iso']}\nCalendar-la add pannattuma?")
                     buttons.append([
-                        InlineKeyboardButton("Yes", callback_data=f"mail:yes:{row['message_id']}"),
-                        InlineKeyboardButton("No", callback_data=f"mail:no:{row['message_id']}"),
+                        InlineKeyboardButton(yes_label, callback_data=f"mail:yes:{row['message_id']}"),
+                        InlineKeyboardButton(no_label, callback_data=f"mail:no:{row['message_id']}"),
                     ])
                 elif row["action_status"] == "added":
-                    text += "\n✅ Calendar-la automatic reminder set panniyachu."
-                buttons.append([InlineKeyboardButton("✉️ Reply to Gmail", callback_data=f"mail:reply:{row['message_id']}")])
+                    text += "\n✅ Automatic Calendar reminder added." if lang == "en" else "\n✅ Calendar-la automatic reminder set panniyachu."
+                buttons.append([InlineKeyboardButton(reply_label, callback_data=f"mail:reply:{row['message_id']}")])
                 keyboard = InlineKeyboardMarkup(buttons)
                 await context.bot.send_message(
                     chat_id=settings.telegram_user_id,
@@ -315,17 +332,20 @@ async def scan_gmail(context, manual: bool = False) -> int:
         if manual:
             await context.bot.send_message(
                 chat_id=settings.telegram_user_id,
-                text=("Gmail scan fail aayiduchu. Google access scope irukku; hosted Strands connection/Gmail API issue irukkalaam. "
-                      "Bot run aagura PowerShell-la 'Gmail scan failed' error details paarunga."),
+                text=(("Gmail scan failed. Google access is configured; check the hosted Strands connection or Gmail API. "
+                       "See the 'Gmail scan failed' details in the bot's PowerShell window." if lang == "en" else
+                       "Gmail scan fail aayiduchu. Google access scope irukku; hosted Strands connection/Gmail API issue irukkalaam. "
+                       "Bot run aagura PowerShell-la 'Gmail scan failed' error details paarunga.")),
             )
     if manual and failed_count:
         await context.bot.send_message(
             chat_id=settings.telegram_user_id,
-            text=f"{failed_count} mail-ai summarize panna mudiyala. Thirumba try pannumbodhu retry aagum.",
+            text=(f"I couldn't summarize {failed_count} email(s). They will be retried on the next scan." if lang == "en"
+                  else f"{failed_count} mail-ai summarize panna mudiyala. Thirumba try pannumbodhu retry aagum."),
         )
     elif manual and scan_ok and processed == 0 and sent_count == 0:
         await context.bot.send_message(
             chat_id=settings.telegram_user_id,
-            text="Last 5 hours-la pudhu mail edhuvum kandupidikkala 🙂",
+            text="No new emails found in the last 5 hours 🙂" if lang == "en" else "Last 5 hours-la pudhu mail edhuvum kandupidikkala 🙂",
         )
     return processed
